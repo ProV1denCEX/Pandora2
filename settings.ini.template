@@ -1,0 +1,53 @@
+[notice-mail]
+from_user = notificationofquant@cxfund.com.cn
+username = notificationofquant
+password =
+host = 10.8.0.121
+port_smtp = 25
+port_pop3 = 110
+
+[db_tsdb]
+dbtype = postgresql
+driver = psycopg2
+host = 10.8.0.169
+port = 5432
+user =
+password =
+database = gplshqdb
+
+[db_65]
+dbtype = mssql
+driver = pymssql
+host = 10.8.1.65
+port = 1433
+user =
+password =
+database =
+
+[db_165]
+dbtype = mssql
+driver = pymssql
+host = 10.8.0.165
+port = 1433
+user =
+password =
+database =
+
+[db_162]
+dbtype = mssql
+driver = pymssql
+host = 10.8.0.162
+port = 1433
+user =
+password =
+database =
+
+[db_wind]
+dbtype = oracle
+driver = cx_oracle
+host = 10.8.1.170
+port = 1521
+user = wind
+password = wind
+database = wind
+
