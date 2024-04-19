@@ -6,7 +6,6 @@ from typing import Union, List, Sequence, Dict
 from urllib import parse
 
 import cx_Oracle
-import numpy as np
 import pandas as pd
 import dolphindb as ddb
 
@@ -314,6 +313,8 @@ class DolphinDbManager(object):
             'contract_futures': 'contract_futures',
             'contract_options': 'contract_options',
 
+            'factor': 'factor',
+
             'trade_time': 'trade_time',
         }
 
@@ -329,77 +330,25 @@ class DolphinDbManager(object):
         if not self.session.isClosed():
             self.session.close()
 
-    def upsert(self, table, data, on):
-        appender: ddb.PartitionedTableAppender = ddb.PartitionedTableAppender(self.db_path, table, on, self.pool)
-        appender.append(data)
-
-    def save_bar_data(self, df: pd.DataFrame, product=None):
-        if product == Product.FUTURES:
-            table_name = self.table_name["bar_futures"]
-
-        elif product == Product.OPTION:
-            table_name = self.table_name["bar_options"]
-
-        else:
-            table_name = self.table_name["bar"]
-
-        self.upsert(table_name, df, "datetime")
-
-    def save_contract_data(self, df: pd.DataFrame, product=Product.FUTURES):
-        if product == Product.FUTURES:
-            table = self.table_name["contract_futures"]
-            on = "expire_date"
-
-        else:
-            table = self.table_name["contract_options"]
-            on = "datetime"
-
-        self.upsert(table, df, on)
-
-    def delete_contract_data(
-            self,
-            symbol: Union[str, List[str]],
-            exchange: Exchange = None,
-            product: Product = Product.FUTURES,
-            start: datetime = None,
-            end: datetime = None
-    ):
-        if product == Product.FUTURES:
-            table_name = self.table_name["contract_futures"]
-            dt_key = "list_date"
-
-        elif product == Product.OPTION:
-            table_name = self.table_name["contract_options"]
-            dt_key = "datetime"
-
-        else:
-            raise NotImplementedError
-
-        table: ddb.Table = self.session.loadTable(tableName=table_name, dbPath=self.db_path)
-        query = table.delete()
-        if symbol:
-            if isinstance(symbol, str):
-                query = query.where(f'symbol="{symbol}"')
-
-            elif isinstance(symbol, list) or isinstance(symbol, set):
-                query = query.where(f'symbol in {tuple(symbol)}')
-
-        if exchange:
-            if isinstance(exchange, Exchange):
-                query = query.where(f'exchange="{exchange.value}"')
-
+    def get_table_name(self, kind, product):
+        if kind == "bar":
+            if product == Product.FUTURES:
+                return self.table_name["bar_futures"]
+            elif product == Product.OPTION:
+                return self.table_name["bar_options"]
             else:
-                query = query.where(f'exchange="{exchange}"')
+                return self.table_name["bar"]
 
-        if start:
-            start = start.strftime(DateFmt.dolphin_datetime.value)
-            query = query.where(f'{dt_key} >= {start}')
+        elif kind == "contract":
+            if product == Product.FUTURES:
+                return self.table_name["contract_futures"]
+            elif product == Product.OPTION:
+                return self.table_name["contract_options"]
+            else:
+                return self.table_name["contract"]
 
-        if end:
-            end = end.strftime(DateFmt.dolphin_datetime.value)
-            query = query.where(f'{dt_key} <= {end}')
-
-        query.execute()
+        else:
+            return self.table_name[kind]
 
     def query(self, table, **kwargs):
         table: ddb.Table = self.session.loadTable(tableName=table, dbPath=self.db_path)
@@ -432,6 +381,15 @@ class DolphinDbManager(object):
 
         return df
 
+    def upsert(self, table, data, on):
+        appender: ddb.PartitionedTableAppender = ddb.PartitionedTableAppender(self.db_path, table, on, self.pool)
+        appender.append(data)
+
+    def save_bar_data(self, df: pd.DataFrame, product=None):
+        table_name = self.get_table_name("bar", product)
+
+        self.upsert(table_name, df, "datetime")
+
     def load_bar_data(
         self,
         symbol: str = None,
@@ -441,14 +399,7 @@ class DolphinDbManager(object):
         start: datetime = None,
         end: datetime = None
     ) -> pd.DataFrame:
-        if product == Product.FUTURES:
-            table_name = self.table_name["bar_futures"]
-
-        elif product == Product.OPTION:
-            table_name = self.table_name["bar_options"]
-
-        else:
-            table_name = self.table_name["bar"]
+        table_name = self.get_table_name("bar", product)
 
         df = self.query(
             table_name,
@@ -470,14 +421,7 @@ class DolphinDbManager(object):
         start: datetime = None,
         end: datetime = None,
     ):
-        if product == Product.FUTURES:
-            table_name = self.table_name["bar_futures"]
-
-        elif product == Product.OPTION:
-            table_name = self.table_name["bar_options"]
-
-        else:
-            table_name = self.table_name["bar"]
+        table_name = self.get_table_name("bar", product)
 
         table: ddb.Table = self.session.loadTable(tableName=table_name, dbPath=self.db_path)
 
@@ -513,6 +457,17 @@ class DolphinDbManager(object):
 
         query.execute()
 
+    def save_contract_data(self, df: pd.DataFrame, product=Product.FUTURES):
+        if product == Product.OPTION:
+            on = "datetime"
+
+        else:
+            on = "expire_date"
+
+        table = self.get_table_name("contract", product)
+
+        self.upsert(table, df, on)
+
     def load_contract_data(
             self,
             symbol: str = None,
@@ -520,15 +475,7 @@ class DolphinDbManager(object):
             start: datetime = None,
             end: datetime = None
     ) -> pd.DataFrame:
-
-        if product == Product.FUTURES:
-            table_name = self.table_name["contract_futures"]
-
-        elif product == Product.OPTION:
-            table_name = self.table_name["contract_options"]
-
-        else:
-            table_name = self.table_name["contract"]
+        table_name = self.get_table_name("contract", product)
 
         table: ddb.Table = self.session.loadTable(tableName=table_name, dbPath=self.db_path)
 
@@ -536,17 +483,83 @@ class DolphinDbManager(object):
         if symbol:
             query = query.where(f'symbol="{symbol}"')
 
-        if start:
-            start = start.strftime(DateFmt.dolphin_datetime.value)
-            query = query.where(f'expire_date>={start}')
+        if product == Product.FUTURES:
+            if start:
+                start = start.strftime(DateFmt.dolphin_datetime.value)
+                query = query.where(f'expire_date>={start}')
 
-        if end:
-            end = end.strftime(DateFmt.dolphin_datetime.value)
-            query = query.where(f'list_date<={end}')
+            if end:
+                end = end.strftime(DateFmt.dolphin_datetime.value)
+                query = query.where(f'list_date<={end}')
+
+        elif product == Product.OPTION:
+            if start:
+                start = start.strftime(DateFmt.dolphin_datetime.value)
+                query = query.where(f'datetime >= {start}')
+
+            if end:
+                end = end.strftime(DateFmt.dolphin_datetime.value)
+                query = query.where(f'datetime <= {end}')
+
+        else:
+            if product:
+                query = query.where(f'product="{product.value}"')
+
+            if start:
+                start = start.strftime(DateFmt.dolphin_datetime.value)
+                query = query.where(f'expire_date>={start}')
+
+            if end:
+                end = end.strftime(DateFmt.dolphin_datetime.value)
+                query = query.where(f'list_date<={end}')
 
         df: pd.DataFrame = query.toDF()
 
         return df
+
+    def delete_contract_data(
+            self,
+            symbol: Union[str, List[str]],
+            exchange: Exchange = None,
+            product: Product = Product.FUTURES,
+            start: datetime = None,
+            end: datetime = None
+    ):
+        table_name = self.get_table_name("contract", product)
+        if product == Product.FUTURES:
+            dt_key = "list_date"
+
+        elif product == Product.OPTION:
+            dt_key = "datetime"
+
+        else:
+            raise NotImplementedError
+
+        table: ddb.Table = self.session.loadTable(tableName=table_name, dbPath=self.db_path)
+        query = table.delete()
+        if symbol:
+            if isinstance(symbol, str):
+                query = query.where(f'symbol="{symbol}"')
+
+            elif isinstance(symbol, list) or isinstance(symbol, set):
+                query = query.where(f'symbol in {tuple(symbol)}')
+
+        if exchange:
+            if isinstance(exchange, Exchange):
+                query = query.where(f'exchange="{exchange.value}"')
+
+            else:
+                query = query.where(f'exchange="{exchange}"')
+
+        if start:
+            start = start.strftime(DateFmt.dolphin_datetime.value)
+            query = query.where(f'{dt_key} >= {start}')
+
+        if end:
+            end = end.strftime(DateFmt.dolphin_datetime.value)
+            query = query.where(f'{dt_key} <= {end}')
+
+        query.execute()
 
 
 class WindDbManager:

@@ -4,6 +4,7 @@ from datetime import date
 from typing import Union, Sequence, Tuple, List
 
 import pandas as pd
+from dateutil import parser
 
 from Pandora.constant import DbConn, DbName, Frequency, EdbType, Method, Label, Sample, SYMBOL_MAP, COM_EXCHANGE, \
     FIN_EXCHANGE, Interval, SymbolSuffix, Product
@@ -514,34 +515,88 @@ class FutureDataAPI:
 
         return self.mssql_165.query(sql)
 
-    def get_future_quote(
-            self, codes: Union[str, Sequence[str]],
-            start: dt.datetime,
-            end: dt.datetime,
-            filter_time=True,
-            interval=Interval.DAILY
+    def get_quote(
+            self,
+            codes: Union[str, Sequence[str]],
+            product: Product,
+            begin_date: Union[str, date],
+            end_date: Union[str, date],
+            fields: Union[str, Sequence[str]] = None,
+            freq=Frequency.Min_1
     ) -> pd.DataFrame:
-        """
-            获取期货或期权的行情数据接口
+        tab_name = self.dolphindb.get_table_name('bar', product)
 
-        :param interval:
-        :param codes: 品种或合约代码,支持混合. 以逗号分割的字符串或集合. 传None查全部.
-                      eg: "A2201,AG" or ["A2201","A2203","B","TF"]
-        :param start: 开始日期
-        :param end:  结束日期
-        :param filter_time:  默认过滤掉23点以后行情
+        cond_str = FutureDataAPI.pair_equals("symbol", codes)
 
+        if isinstance(begin_date, str):
+            begin_date = parser.parse(timestr=begin_date, fuzzy=True)
 
-        :return: DataFrame
-        columns=(Datetime,Date,TradeDate,Contract,Ticker,[OHLC], PrevClose,Volume,Amount, DealAmount,OpenInterest,
-                 Buy1,Sale1,Bc1,Sc1)
-        """
-        df_quote = self.dolphindb.load_bar_data(
-            symbol=codes,
-            product=Product.FUTURES,
+        if isinstance(end_date, str):
+            end_date = parser.parse(timestr=end_date, fuzzy=True)
+
+        if isinstance(freq, Interval):
+            interval = freq
+
+        elif isinstance(freq, Frequency):
+            interval = Interval.from_freq(freq)
+
+        elif isinstance(freq, str):
+            interval = Interval.from_str(freq)
+
+        else:
+            raise NotImplementedError
+
+        if isinstance(fields, str):
+            fields = [fields]
+
+        if fields:
+            fields = [Strs.camel_to_snake(i) for i in fields]
+
+        else:
+            fields = ['open_price', 'high_price', 'low_price', 'close_price', 'volume', 'turnover', 'open_interest']
+
+        fields = "datetime,symbol," + ','.join(fields)
+
+        df_quote = self.dolphindb.query(
+            tab_name,
+            fields=fields,
             interval=interval,
-            start=start,
-            end=end,
+            start=begin_date,
+            end=end_date,
+            where=cond_str
+        )
+
+        return df_quote
+
+    def get_future_quote(
+        self,
+        codes: Union[str, Sequence[str]],
+        begin_date: Union[str, date],
+        end_date: Union[str, date],
+        filter_time=True,
+        fields: Union[str, Sequence[str]] = None,
+        freq=Frequency.Min_1
+    ) -> pd.DataFrame:
+
+        if isinstance(freq, Interval):
+            interval = freq
+
+        elif isinstance(freq, Frequency):
+            interval = Interval.from_freq(freq)
+
+        elif isinstance(freq, str):
+            interval = Interval.from_str(freq)
+
+        else:
+            raise NotImplementedError
+
+        df_quote = self.get_quote(
+            codes,
+            Product.FUTURES,
+            begin_date,
+            end_date,
+            fields=fields,
+            freq=interval,
         )
 
         if filter_time and interval != Interval.DAILY:
@@ -549,9 +604,9 @@ class FutureDataAPI:
 
         return df_quote
 
-
     def get_future_quote_main_adj(
-            self, codes: Union[str, Sequence[str]],
+            self,
+            codes: Union[str, Sequence[str]],
             begin_date: Union[str, date],
             end_date: Union[str, date],
             adjusted=True,
@@ -574,48 +629,24 @@ class FutureDataAPI:
         :return: DataFrame
         columns=(Datetime,Date,TradeDate,Contract,Ticker,[OHLC],PrevClose,Volume,Amount,DealAmount,OpenInterest)
         """
-        tab_name = self.dolphindb.table_name['bar_futures']
 
-        contracts = {Symbol.get_contract(i) for i in codes}
+        if codes:
+            contracts = {Symbol.get_contract(i, upper=False) for i in codes}
 
-        symbol_suffix = SymbolSuffix.MC if adjusted else SymbolSuffix.MNC
-        symbols = [i + symbol_suffix for i in contracts]
-
-        cond_str = FutureDataAPI.pair_equals("symbol.upper()", symbols)
-
-        if isinstance(fields, str):
-            fields = [fields]
-
-        if fields:
-            fields = [Strs.camel_to_snake(i) for i in fields]
+            symbol_suffix = SymbolSuffix.MC if adjusted else SymbolSuffix.MNC
+            symbols = [i + symbol_suffix for i in contracts]
 
         else:
-            fields = ['open_price', 'high_price', 'low_price', 'close_price', 'volume', 'turnover', 'open_interest']
+            symbols = codes
 
-        fields = "datetime,symbol," + ','.join(fields)
-        if isinstance(freq, Interval):
-            interval = freq
-
-        elif isinstance(freq, Frequency):
-            interval = Interval.from_freq(freq)
-
-        elif isinstance(freq, str):
-            interval = Interval.from_str(freq)
-
-        else:
-            raise NotImplementedError
-
-        df_quote = self.dolphindb.query(
-            tab_name,
+        df_quote = self.get_future_quote(
+            codes=symbols,
+            begin_date=begin_date,
+            end_date=end_date,
+            filter_time=filter_time,
             fields=fields,
-            interval=interval,
-            start=begin_date,
-            end=end_date,
-            where=cond_str
+            freq=freq
         )
-
-        if filter_time and freq != Frequency.Daily:
-            df_quote = self.filtering_time(df_quote)
 
         return df_quote
 
@@ -888,60 +919,50 @@ class FutureDataAPI:
         Factor
     """
 
-    def get_future_factor(self, ids: Union[str, Sequence[str]] = None,
-                          tags: Union[str, Sequence[str]] = None,
-                          freq: Frequency = Frequency.Min_1,
-                          begin_date: Union[str, date] = None,
-                          end_date: Union[str, date] = None,
-                          codes: Union[str, Sequence[str]] = None,
-                          db_type: DbConn = DbConn.MSSQL_165) -> pd.DataFrame:
-        """
-            获取因子数据
+    def get_factor(
+            self,
+            symbols: Union[str, Sequence[str]] = None,
+            freq: Frequency = Frequency.Min_1,
+            ids: Union[str, Sequence[str]] = None,
+            names: Union[str, Sequence[str]] = None,
 
-        :param ids: factorId.
-        :param tags: 因子标签. 在factorId过滤后再次过滤
-        :param freq: 行情频次(enum) 1/5/15/30/60/daily, 默认1min
-        :param begin_date: 开始日期
-        :param end_date: 结束日期
-        :param codes: 合约列表
-        :return: DataFrame
-                 columns=(Datetime, Date, FactorId, Tag, FactorValue, FactorReturn)
+            begin_date: Union[str, date] = None,
+            end_date: Union[str, date] = None,
+    ) -> pd.DataFrame:
 
-        场景1: mssql_65提取因子数据,
-        场景2: tsdb 提取因子数据
-        """
-        where = FutureDataAPI.pair_dates("Date", begin_date, end_date)
-        tb_suffix = "Daily" if freq == Frequency.Daily else f"{freq.value}min"
-        if db_type == DbConn.MSSQL_165:
-            db = self.mssql_65
-            tb_factor, tb_tag = f"dbo.FutureFactor_{tb_suffix}", f"dbo.FutureFactorInfo_Tag"
+        tab_name = self.dolphindb.table_name['factor']
+        if isinstance(freq, Interval):
+            interval = freq
 
-            # SQLServer 高于 14.x 版本有 string_agg() 函数可以聚合tag, 当前65上版本是10.x, 只能通过pd聚合
-            sql = (f"SELECT ffd.Datetime,ffd.Date,ffd.Code,ffit.Tag,ffd.FactorID,ffd.FactorValue,ffd.FactorReturn "
-                   f" FROM {tb_factor} ffd LEFT JOIN {tb_tag} ffit "
-                   f" ON ffd.FactorID = ffit.FactorID WHERE {where}")
-            cond = [FutureDataAPI.pair_equals("ffd.FactorID", ids),
-                    FutureDataAPI.pair_equals("ffit.Tag", tags)]
+        elif isinstance(freq, Frequency):
+            interval = Interval.from_freq(freq)
 
-        elif db_type == DbConn.TSDB_169:
-            db = self.tsdb
-            tb_factor = "future_factor_" + tb_suffix
-            sql = f"select Datetime,Date,Factor_ID,Code,Factor_value from {tb_factor} where {where} "
-            cond = [FutureDataAPI.pair_equals("factor_id", ids),
-                    FutureDataAPI.pair_equals("code", codes)]
+        elif isinstance(freq, str):
+            interval = Interval.from_str(freq)
 
         else:
-            ValueError(f"{db_type} not supported !")
+            raise NotImplementedError
+
+        cond = [
+            FutureDataAPI.pair_equals("symbol", symbols),
+            FutureDataAPI.pair_equals("factor_id", ids),
+            FutureDataAPI.pair_equals("factor_name", names),
+        ]
 
         cond = [c for c in cond if c.strip()]
         cond_str = " AND ".join(cond) if cond else ""
-        sql += f" AND ({cond_str})" if cond_str else ""
-        data = db.query(sql)
 
-        if db_type == DbConn.TSDB_169:
-            data.columns = [Strs.snake_to_camel(col) for col in data.columns]
+        df = self.dolphindb.query(
+            tab_name,
+            interval=interval,
+            start=begin_date,
+            end=end_date,
+            where=cond_str
+        )
 
-        return data.sort_values('Datetime').reset_index(drop=True)
+        return df
+
+    get_future_factor = get_factor
 
     def get_edb_data(self, ids: Union[int, Sequence[int]],
                      industry: Union[str, Sequence[str]],
@@ -993,6 +1014,72 @@ class FutureDataAPI:
             sql_edb += cond
 
             return df_edb_info, self.mssql_165.query(sql_edb)
+
+    def get_option_quote(
+            self,
+            codes: Union[str, Sequence[str]] = None,
+            start: Union[str, date] = None,
+            end: Union[str, date] = None,
+            interval: Interval = Interval.DAILY,
+    ) -> pd.DataFrame:
+
+        df_quote = self.dolphindb.load_bar_data(
+            symbol=codes,
+            product=Product.OPTION,
+            interval=interval,
+            start=start,
+            end=end,
+        )
+
+        return df_quote
+
+    def get_option_chain(
+            self,
+            codes_underlying: Union[str, Sequence[str]] = None,
+            product_underlying: Product = None,
+            start: Union[str, date] = None,
+            end: Union[str, date] = None,
+            interval: Interval = Interval.DAILY,
+    ):
+
+        if isinstance(codes_underlying, str):
+            codes_underlying = [codes_underlying]
+
+        ret = {}
+        option_contract_table = self.dolphindb.get_table_name("contract", Product.OPTION)
+        option_bar_table = self.dolphindb.get_table_name("bar", Product.OPTION)
+        for symbol in codes_underlying:
+            ret[symbol] = {}
+            ret[symbol]['contract_underlying'] = self.dolphindb.load_contract_data(symbol, product_underlying, start,
+                                                                                   end)
+
+            ret[symbol]['bar_underlying'] = self.dolphindb.load_bar_data(
+                symbol=symbol,
+                product=product_underlying,
+                interval=interval,
+                start=start,
+                end=end,
+            )
+
+            ret[symbol]['contract_options'] = contract_options = self.dolphindb.query(
+                option_contract_table,
+                start=start,
+                end=end,
+                option_underlying=symbol,
+            )
+
+            symbols = tuple(contract_options["symbol"].unique().tolist())
+            where_str = f"symbol in {symbols}"
+
+            ret[symbol]['bar_options'] = self.dolphindb.query(
+                option_bar_table,
+                start=start,
+                end=end,
+                interval=interval,
+                where=where_str
+            )
+
+        return ret
 
     """
         For Backtest Result reading / writing

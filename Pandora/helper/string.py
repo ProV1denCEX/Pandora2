@@ -58,8 +58,12 @@ class Strs:
 
 class Symbol(object):
     @staticmethod
-    def get_contract(symbol: str):
-        return ''.join((i for i in symbol.upper() if i.isalpha()))
+    def get_contract(symbol: str, upper=True):
+        if upper:
+            return ''.join((i for i in symbol.upper() if i.isalpha()))
+
+        else:
+            return ''.join((i for i in symbol if i.isalpha()))
 
     @staticmethod
     def get_num_str_in_string(string: str):
