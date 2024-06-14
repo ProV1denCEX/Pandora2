@@ -314,6 +314,7 @@ class DolphinDbManager(object):
             'contract_options': 'contract_options',
 
             'factor': 'factor',
+            'option_greeks': 'option_greeks',
 
             'trade_time': 'trade_time',
         }

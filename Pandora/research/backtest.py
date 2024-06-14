@@ -7,35 +7,35 @@ import pandas as pd
 from Pandora.data_manager import FutureDataAPI
 
 
-COMMISSION = 3e-4
+COMMISSION = 2e-4
 
 CODES_MM = set(  # 25 in total
-    "RB;I;J;HC;JM;"  # 黑色 5
-    "NI;AL;ZN;"  # 金属 3
-    "CF;AP;SR;Y;M;C;P;"  # 农产 7
-    "BU;MA;TA;RU;SP;FU;SA;V;FG;PP"  # 能化 10
+    "rb;i;j;hc;jm;"  # 黑色 5
+    "ni;al;zn;"  # 金属 3
+    "CF;AP;SR;y;m;c;p;"  # 农产 7
+    "bu;MA;TA;ru;sp;fu;SA;v;FG;pp"  # 能化 10
     .split(';')
 )
 
 CODES_INTER = {  # 22
-    "BU", "FU", "V", "TA", "EB", "MA", "EG", "RU",  # 能化 8
-    "CF", "AP", "P", "RM", "JD",  # 农产 5
-    "CU", "ZN", "AL",  # 有色 3
-    "HC", "I", "J", "RB", "JM"  # 黑色 5
-                          "AG",  # 贵金属 1
+    "bu", "fu", "v", "TA", "eb", "MA", "eg", "ru",  # 能化 8
+    "CF", "AP", "p", "RM", "jd",  # 农产 5
+    "cu", "zn", "al",  # 有色 3
+    "hc", "i", "j", "rb", "jm"  # 黑色 5
+                          "ag",  # 贵金属 1
 }
 
-CODES_SHORT = set(  # 25 in total
-    "RB;I;J;HC;JM;"  # 黑色 5
-    "NI;AL;ZN;"  # 金属 3
-    "CF;AP;SR;Y;M;C;P;"  # 农产 7
-    "BU;MA;TA;RU;SP;FU;SA;V;FG;PP"  # 能化 10
-    .split(';')
-)
+CODES_SHORT = {  # 25 in total
+    'ag',  # 贵金属
+    'p', 'AP', 'lh', 'PK', 'CJ',  # 农产 5
+    'UR', 'SA', 'eb', 'eg', 'PF', 'pg', 'v', 'FG', 'TA', 'MA', 'sc',  # 能化 'MA', 'OI', 'Y'  11   5个与mm一致
+    'rb', 'hc', 'i', 'j', 'jm',  # 黑色 5
+    'al', 'ni', 'cu',  # 金属  3  'CU'
+}
 
-CODES_TRADABLE = {'A', 'AG', 'AL', 'AP', 'AU', 'B', 'BU', 'C', 'CF', 'CJ', 'CS', 'CU', 'EB', 'EG', 'FG', 'HC', 'FU',
-                  'I', 'J', 'JD', 'JM', 'L', 'LH', 'M', 'MA', 'NI', 'OI', 'P', 'PB', 'PF', 'PG', 'PK', 'PP', 'RB', 'RM',
-                  'RU', 'SA', 'SC', 'SF', 'SM', 'SN', 'SP', 'SR', 'SS', 'TA', 'UR', 'V', 'Y', 'ZN'}
+CODES_TRADABLE = {'a', 'ag', 'al', 'AP', 'au', 'b', 'bu', 'c', 'CF', 'CJ', 'cs', 'cu', 'eb', 'eg', 'FG', 'hc', 'fu',
+                  'i', 'j', 'jd', 'jm', 'l', 'lh', 'm', 'MA', 'ni', 'OI', 'p', 'pb', 'PF', 'pg', 'PK', 'pp', 'rb', 'RM',
+                  'ru', 'SA', 'sc', 'SF', 'SM', 'sn', 'sp', 'SR', 'ss', 'TA', 'UR', 'v', 'y', 'zn'}
 
 
 def get_quote(codes, start=dt.datetime(2015, 1, 1), end=dt.datetime.now(), **kwargs):
@@ -199,9 +199,9 @@ def trade_by_cross_ma(feat, window):
     open_signal_df = pd.DataFrame(np.nan, index=feat.index, columns=feat.columns)
     for col in range(feat.shape[1]):
         ft = feat.iloc[:, col].dropna()
-        ma = bn.move_mean(ft.values, window, 1, axis=0)
+        MA = bn.move_mean(ft.values, window, 1, axis=0)
 
-        cross = ft - ma
+        cross = ft - MA
 
         sig = pd.Series(np.nan, index=cross.index)
         loc = (cross > 0) & (cross.shift() <= 0)
@@ -275,11 +275,11 @@ def trade_by_bband(feat, window, std_multiplier=1):
     open_signal = np.empty_like(feat)
     open_signal[:] = np.nan
 
-    ma = bn.move_mean(feat, window, axis=0)
+    MA = bn.move_mean(feat, window, axis=0)
     std = bn.move_std(feat, window, axis=0)
 
-    upper = ma + std * std_multiplier
-    lower = ma - std * std_multiplier
+    upper = MA + std * std_multiplier
+    lower = MA - std * std_multiplier
 
     loc = (feat > upper) & (feat.shift() <= upper)
     open_signal[loc] = 1
@@ -516,12 +516,13 @@ def get_trade_info(returns, signal, day_count=23, comm=3e-4):
     trade[sig == 0] = 0
 
     trade_detail = []
-    trade_info_col = pd.DataFrame()
+    trade_info_col = {}
     for col in trade.columns:
         trade_col = trade[col]
         returns_col = returns[col] / sig[col].abs()
 
         trade_ret = returns_col.groupby(trade_col).sum() - comm * 2
+        trade_weight = sig[col].groupby(trade_col).mean()
 
         trade_hp = trade_col.value_counts()
         trade_hp = trade_hp[trade_hp.index != 0] / day_count
@@ -531,6 +532,7 @@ def get_trade_info(returns, signal, day_count=23, comm=3e-4):
         trade_detail_col['EnterTime'] = trade_.groupby(col)['datetime'].first()
         trade_detail_col['ExitTime'] = trade_.groupby(col)['datetime'].last()
 
+        trade_detail_col['Weight'] = trade_weight
         trade_detail_col['PnL'] = trade_ret
         trade_detail_col['HP'] = trade_hp
         trade_detail_col = trade_detail_col.reset_index().rename(columns={col: 'TradeID'})
@@ -543,8 +545,9 @@ def get_trade_info(returns, signal, day_count=23, comm=3e-4):
         trade_detail.append(trade_detail_col)
 
         trade_describe = describe_trade(trade_detail_col)
-        trade_info_col.loc[:, col] = trade_describe
+        trade_info_col[col] = trade_describe
 
+    trade_info_col = pd.DataFrame(trade_info_col)
     trade_detail = pd.concat(trade_detail).reset_index(drop=True)
 
     trade_describe = describe_trade(trade_detail)
@@ -951,7 +954,7 @@ def exit_w_loss_exit(open_signal, close, stoploss, max_hp = None):
 def exit_w_max_hp(open_signal, max_hp):
     open_signal_exit = open_signal.copy()
 
-    for j in range(open_signal_exit.sahape[1]):
+    for j in range(open_signal_exit.shape[1]):
         signal_ = open_signal.iloc[:, j]
 
         indices = np.where(~np.isnan(signal_))

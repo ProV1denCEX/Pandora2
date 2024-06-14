@@ -71,7 +71,7 @@ class BaseEnum(Enum):
         return {mem.name: mem.value for _, mem in cls.__members__.items()}
 
 
-class Exchange(BaseEnum):
+class Exchange(Enum):
     """
     Exchange.
     """
@@ -125,6 +125,11 @@ class Exchange(BaseEnum):
     KRX = "KRX"             # Korean Exchange
     OTC = "OTC"             # OTC Product (Forex/CFD/Pink Sheet Equity)
     IBKRATS = "IBKRATS"     # Paper Trading Exchange of IB
+
+    BINANCE = "BINANCE"
+    OKX = "OKX"
+    BYBIT = "BYBIT"
+    DERIBIT = "DERIBIT"
 
     # Special Function
     LOCAL = "LOCAL"         # For local generated data
@@ -268,7 +273,7 @@ class Frequency(BaseEnum):
     @staticmethod
     def from_val(val):
         for i in Frequency:
-            if i.value == val:
+            if i.value == val or str(i.value) == val:
                 return i
 
         return Frequency.UNKNOWN

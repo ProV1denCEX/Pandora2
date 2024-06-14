@@ -24,11 +24,11 @@ def mks(A: np.ndarray, n: int, imax: int = 0):
 
 
 def get_mks_factor(quote, param):
-    feat = pd.DataFrame()
-    for code, group in quote.groupby('Contract'):
-        A = group['Close']
-        # A = (group['Close'] + group['Low'] + group['High']) / 3
-        # A = (group['Close'] + group['Low'] + group['High']) / 3 * group['Amount']
+    feat = {}
+    for code, group in quote.groupby('symbol'):
+        A = group['close_price']
+        # A = (group['close_price'] + group['low_price'] + group['high_price']) / 3
+        # A = (group['close_price'] + group['low_price'] + group['high_price']) / 3 * group['Amount']
         # f = pd.Series(mks(A, param), index=group.index)
 
         # A = (group['Amount'] / group['Volume']).fillna(method='ffill')
@@ -37,14 +37,14 @@ def get_mks_factor(quote, param):
         # f = pd.Series(mks_test(A, param), index=group.index)
         feat[code] = f
 
-    return feat
+    return pd.DataFrame(feat)
 
 
 def get_natr_factor(quote, param):
     feat = {}
 
-    for code, group in quote.groupby('Contract'):
-        f = talib.NATR(group['High'], group['Low'], group['Close'], param)
+    for code, group in quote.groupby('symbol'):
+        f = talib.NATR(group['high_price'], group['low_price'], group['close_price'], param)
 
         feat[code] = f
 
@@ -54,10 +54,10 @@ def get_natr_factor(quote, param):
 def get_std_factor(quote, param):
     feat = {}
 
-    for code, group in quote.groupby('Contract'):
+    for code, group in quote.groupby('symbol'):
 
         # alpha = 2 / (param + 1)
-        f = group['Close'].rolling(param).std()
+        f = group['close_price'].rolling(param).std()
 
         feat[code] = f
 
@@ -67,8 +67,8 @@ def get_std_factor(quote, param):
 def get_ema_factor(quote, param):
     feat = {}
 
-    for code, group in quote.groupby('Contract'):
-        ma1 = group['Close'].ewm(span=param).mean()
+    for code, group in quote.groupby('symbol'):
+        ma1 = group['close_price'].ewm(span=param).mean()
 
         feat[code] = ma1
 
@@ -87,8 +87,8 @@ def get_stm_factor(quote, param):
 
 def get_rsi_factor(quote, param):
     feat = {}
-    for code, group in quote.groupby('Contract'):
-        ret = group['Close'].diff()
+    for code, group in quote.groupby('symbol'):
+        ret = group['close_price'].diff()
 
         loc = ret > 0
         rv = np.abs(ret)

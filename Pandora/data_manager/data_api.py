@@ -569,13 +569,13 @@ class FutureDataAPI:
         return df_quote
 
     def get_future_quote(
-        self,
-        codes: Union[str, Sequence[str]],
-        begin_date: Union[str, date],
-        end_date: Union[str, date],
-        filter_time=True,
-        fields: Union[str, Sequence[str]] = None,
-        freq=Frequency.Min_1
+            self,
+            codes: Union[str, Sequence[str]],
+            begin_date: Union[str, date],
+            end_date: Union[str, date],
+            filter_time=True,
+            fields: Union[str, Sequence[str]] = None,
+            freq=Frequency.Min_1
     ) -> pd.DataFrame:
 
         if isinstance(freq, Interval):
@@ -637,7 +637,14 @@ class FutureDataAPI:
             symbols = [i + symbol_suffix for i in contracts]
 
         else:
-            symbols = codes
+            suffix = SymbolSuffix.MC if adjusted else SymbolSuffix.MNC
+            symbols = self.dolphindb.query(
+                self.dolphindb.get_table_name("contract", Product.FUTURES),
+                fields="symbol",
+                where=f'symbol.endsWith("{suffix}")'
+            )
+
+            symbols = symbols['symbol'].unique().tolist()
 
         df_quote = self.get_future_quote(
             codes=symbols,
@@ -647,6 +654,38 @@ class FutureDataAPI:
             fields=fields,
             freq=freq
         )
+
+        return df_quote
+
+    def get_future_quote_mssql(
+            self,
+            codes: Union[str, Sequence[str]],
+            begin_date: Union[str, date],
+            end_date: Union[str, date],
+            fields: Union[str, Sequence[str]] = None,
+            freq=Frequency.Daily
+    ):
+        assert freq == Frequency.Daily
+
+        if fields:
+            if not isinstance(fields, str):
+                fields = ','.join([i for i in fields])
+
+            sql = f"SELECT {fields} FROM FutureQuote_Daily"
+
+        else:
+            sql = "SELECT * FROM FutureQuote_Daily"
+
+        cond = [
+            FutureDataAPI.pair_equals("Ticker", codes),
+            FutureDataAPI.pair_dates("Date", begin_date, end_date)
+        ]
+
+        cond = [c for c in cond if c.strip()]
+        cond_str = " AND ".join(cond) if cond else ""
+        sql += f" WHERE {cond_str}"
+
+        df_quote = self.mssql_165.query(sql)
 
         return df_quote
 
@@ -902,6 +941,13 @@ class FutureDataAPI:
         """
         table_name = "dbo.FutureCoefAdj_MainTicker"
         sql = f"SELECT Date,Contract,Ticker,CoefAdj, UpdateTime From {table_name} WHERE "
+
+        if isinstance(begin_date, dt.datetime):
+            begin_date = begin_date.date()
+
+        if isinstance(end_date, dt.datetime):
+            end_date = end_date.date()
+
         where = FutureDataAPI.pair_dates("Date", begin_date, end_date)
 
         contracts, tickers = FutureDataAPI.split_codes(codes)
@@ -1015,6 +1061,32 @@ class FutureDataAPI:
 
             return df_edb_info, self.mssql_165.query(sql_edb)
 
+    def get_risk_free_rate(
+            self,
+            symbol: Union[str, Sequence[str]] = None,
+            begin_date: Union[str, date] = None,
+            end_date: Union[str, date] = None,
+    ):
+        table_name = "RiskFreeRate"
+
+        sql = f"SELECT Date,Symbol,Rate FROM {table_name} WHERE "
+        if isinstance(begin_date, dt.datetime):
+            begin_date = begin_date.date()
+
+        if isinstance(end_date, dt.datetime):
+            end_date = end_date.date()
+
+        where = FutureDataAPI.pair_dates("Date", begin_date, end_date)
+
+        cond = [FutureDataAPI.pair_equals("Symbol", symbol),]
+        cond = [c for c in cond if c.strip()]
+        cond_str = " OR ".join(cond) if cond else ""
+        where += f" AND ({cond_str})" if cond_str else ""
+        where += " ORDER BY Date "
+        sql += where
+
+        return self.mssql_165.query(sql)
+
     def get_option_quote(
             self,
             codes: Union[str, Sequence[str]] = None,
@@ -1040,10 +1112,14 @@ class FutureDataAPI:
             start: Union[str, date] = None,
             end: Union[str, date] = None,
             interval: Interval = Interval.DAILY,
+            option_fields: Union[str, Sequence[str]] = "*",
     ):
 
         if isinstance(codes_underlying, str):
             codes_underlying = [codes_underlying]
+
+        if isinstance(option_fields, list):
+            option_fields = ",".join(option_fields)
 
         ret = {}
         option_contract_table = self.dolphindb.get_table_name("contract", Product.OPTION)
@@ -1076,7 +1152,8 @@ class FutureDataAPI:
                 start=start,
                 end=end,
                 interval=interval,
-                where=where_str
+                where=where_str,
+                fields=option_fields
             )
 
         return ret
@@ -1085,17 +1162,9 @@ class FutureDataAPI:
         For Backtest Result reading / writing
     """
 
-    def get_backtest_info(self, backtest_id: int) -> pd.DataFrame:
-        table_name = "[dbo].[StrategyBackTest]"
-        sql = f"""SELECT [BackTestID]
-                        ,[StrategyClass]
-                        ,[ParameterSetID]
-                        ,[StrategyName]
-                        ,[UserName]
-                        ,[MachineName]
-                        ,[TimeSpend]
-                        ,[UpdateTime]
-                    FROM {table_name} WHERE 1=1 """
+    def get_backtest_info(self, backtest_id: str) -> pd.DataFrame:
+        table_name = "[dbo].[StrategyBackTestInfo]"
+        sql = f"""SELECT * FROM {table_name} WHERE 1=1 """
 
         cond = [
             FutureDataAPI.pair_equals("BackTestID", backtest_id)
@@ -1203,14 +1272,11 @@ class FutureDataAPI:
 
         return self.mssql_65.query(sql)
 
-    def get_backtest_nav(self, backtest_id: int) -> pd.DataFrame:
-        table_name = "[dbo].[StrategyBacktestNav]"
+    def get_backtest_ret(self, backtest_id: int) -> pd.DataFrame:
+        table_name = "[dbo].[StrategyBacktestRet]"
         sql = f"""SELECT [BackTestID]
                         ,[DateTime]
-                        ,[TradeDate]
-                        ,[Nav]
-                        ,[Rtn]
-                        ,[UpdateTime]
+                        ,[Ret]
                 FROM {table_name} WHERE 1=1 """
 
         cond = [
@@ -1508,16 +1574,13 @@ class FutureDataAPI:
         self.mssql_65.upsert('StrategyAnalyzerContribution', data, ['BackTestID', 'Contribute', 'Type'],
                              audit_columns={'update': 'UpdateTime'})
 
-    def save_backtest_info(self, data: pd.DataFrame, backtest_id=None):
-        data.loc[:, 'BackTestID'] = backtest_id
-        new_backtest_id = self.mssql_65.upsert(table='StrategyBackTest',
-                                               data=data,
-                                               on=['BackTestID'],
-                                               columns=['BackTestID', 'StrategyClass', 'ParameterSetID', 'StrategyName',
-                                                        'UserName', 'MachineName', 'TimeSpend'],
-                                               identity_columns=['BackTestID'], audit_columns={'update': 'UpdateTime'})
-
-        return backtest_id if backtest_id else new_backtest_id[0][0]
+    def save_backtest_info(self, data: pd.DataFrame):
+        self.mssql_65.upsert(
+            table='StrategyBacktestInfo',
+            data=data,
+            on=['BackTestID'],
+            audit_columns={'update': 'UpdateTime'}
+        )
 
     def save_backtest_trade(self, data: pd.DataFrame):
         self.mssql_65.upsert(table='StrategyBacktestTrade', data=data,
@@ -1567,10 +1630,10 @@ class FutureDataAPI:
 
         return parameter_set_id
 
-    def save_backtest_nav(self, data: pd.DataFrame):
-        self.mssql_65.upsert(table='StrategyBacktestNav', data=data,
+    def save_backtest_ret(self, data: pd.DataFrame):
+        self.mssql_65.upsert(table='StrategyBacktestRet', data=data,
                              on=['BackTestID', 'DateTime'],
-                             columns=['BackTestID', 'DateTime', 'TradeDate', 'Nav', 'Rtn'],
+                             columns=['BackTestID', 'DateTime', 'Ret'],
                              audit_columns={'update': 'UpdateTime'})
 
     def save_account_position(self, data: pd.DataFrame, upsert=True) -> None:

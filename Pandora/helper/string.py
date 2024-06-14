@@ -155,7 +155,6 @@ class Symbol(object):
             else:
                 time = str(int(this_year[-2]) - 1) + time
         elif len(time) < 3:
-            time = None
             print("time in ticker shorter than 3 digits")
 
         return contract + time
