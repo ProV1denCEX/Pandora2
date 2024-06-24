@@ -869,7 +869,9 @@ def exit_w_atr_exit(open_signal, close, atr, atr_multiplier, max_hp = None):
                 close_idx = 0
 
             if close_idx:
-                close_idx = min(close_idx, max_hp)
+                if max_hp:
+                    close_idx = min(close_idx, max_hp)
+
                 os_exit_np[i + close_idx, j] = 0
                 next_idx = i + close_idx + 1
 
