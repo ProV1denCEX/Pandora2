@@ -1162,16 +1162,17 @@ class FutureDataAPI:
         For Backtest Result reading / writing
     """
 
-    def get_backtest_info(self, backtest_id: str) -> pd.DataFrame:
+    def get_backtest_info(self, backtest_id: str = None) -> pd.DataFrame:
         table_name = "[dbo].[StrategyBackTestInfo]"
         sql = f"""SELECT * FROM {table_name} WHERE 1=1 """
 
-        cond = [
-            FutureDataAPI.pair_equals("BackTestID", backtest_id)
-        ]
-        cond = [c for c in cond if c.strip()]
-        cond_str = " OR ".join(cond) if cond else ""
-        sql += f" AND ({cond_str})" if cond_str else ""
+        if backtest_id:
+            cond = [
+                FutureDataAPI.pair_equals("BackTestID", backtest_id)
+            ]
+            cond = [c for c in cond if c.strip()]
+            cond_str = " OR ".join(cond) if cond else ""
+            sql += f" AND ({cond_str})" if cond_str else ""
 
         return self.mssql_65.query(sql)
 

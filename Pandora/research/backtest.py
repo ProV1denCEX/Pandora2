@@ -4,8 +4,6 @@ import bottleneck as bn
 import numpy as np
 import pandas as pd
 
-from Pandora.data_manager import FutureDataAPI
-
 
 COMMISSION = 2e-4
 
@@ -22,7 +20,7 @@ CODES_INTER = {  # 22
     "CF", "AP", "p", "RM", "jd",  # 农产 5
     "cu", "zn", "al",  # 有色 3
     "hc", "i", "j", "rb", "jm"  # 黑色 5
-                          "ag",  # 贵金属 1
+    "ag",  # 贵金属 1
 }
 
 CODES_SHORT = {  # 25 in total
@@ -39,6 +37,8 @@ CODES_TRADABLE = {'a', 'ag', 'al', 'AP', 'au', 'b', 'bu', 'c', 'CF', 'CJ', 'cs',
 
 
 def get_quote(codes, start=dt.datetime(2015, 1, 1), end=dt.datetime.now(), **kwargs):
+    from Pandora.data_manager import FutureDataAPI
+
     api = FutureDataAPI()
 
     quote_bt = api.get_future_quote_main_adj(codes, start, end, **kwargs)
