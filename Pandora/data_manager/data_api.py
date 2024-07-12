@@ -1637,6 +1637,12 @@ class FutureDataAPI:
                              columns=['BackTestID', 'DateTime', 'Ret'],
                              audit_columns={'update': 'UpdateTime'})
 
+    def save_pack_ret(self, data: pd.DataFrame):
+        self.mssql_65.upsert(table='StrategyPackRet', data=data,
+                             on=['StrategyName', 'DateTime'],
+                             columns=['StrategyName', 'DateTime', 'Ret'],
+                             audit_columns={'update': 'UpdateTime'})
+
     def save_account_position(self, data: pd.DataFrame, upsert=True) -> None:
         if upsert:
             self.mssql_162.upsert(table=f'[dbo].[AccountPositionInfo]',
