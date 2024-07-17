@@ -291,6 +291,12 @@ class Frequency(BaseEnum):
         return self.name.lower().split('_')[0]
 
 
+class EngineType(Enum):
+    LIVE = "Live"
+    SIGNAL = "Signal"
+    BACKTESTING = "Backtest"
+
+
 class EdbType(Enum):
     BASIC = "basic"
     ADV = "adv"
