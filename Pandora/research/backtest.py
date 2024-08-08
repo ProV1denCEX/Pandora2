@@ -1019,3 +1019,8 @@ def calc_calmar(returns):
     maxdd = np.max(np.maximum.accumulate(nv) - nv) + 1e-8
     return arr / maxdd
 
+
+def calc_maxdd(returns):
+    nv = np.cumsum(returns) + 1
+    return np.max(np.maximum.accumulate(nv) - nv)
+

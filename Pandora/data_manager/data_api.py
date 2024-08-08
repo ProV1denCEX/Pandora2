@@ -1273,7 +1273,7 @@ class FutureDataAPI:
 
         return self.mssql_65.query(sql)
 
-    def get_backtest_ret(self, backtest_id: int) -> pd.DataFrame:
+    def get_backtest_ret(self, backtest_id: str) -> pd.DataFrame:
         table_name = "[dbo].[StrategyBacktestRet]"
         sql = f"""SELECT [BackTestID]
                         ,[DateTime]
@@ -1282,6 +1282,23 @@ class FutureDataAPI:
 
         cond = [
             FutureDataAPI.pair_equals("BackTestID", backtest_id),
+        ]
+        cond = [c for c in cond if c.strip()]
+        cond_str = " AND ".join(cond) if cond else ""
+        sql += f" AND ({cond_str})" if cond_str else ""
+        sql += " ORDER BY DateTime "
+
+        return self.mssql_65.query(sql)
+
+    def get_strategy_pack_ret(self, strategy_name: str) -> pd.DataFrame:
+        table_name = "[dbo].[StrategyPackRet]"
+        sql = f"""SELECT [StrategyName]
+                        ,[DateTime]
+                        ,[Ret]
+                FROM {table_name} WHERE 1=1 """
+
+        cond = [
+            FutureDataAPI.pair_equals("StrategyName", strategy_name),
         ]
         cond = [c for c in cond if c.strip()]
         cond_str = " AND ".join(cond) if cond else ""
