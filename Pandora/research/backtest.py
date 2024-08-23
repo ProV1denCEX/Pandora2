@@ -4,7 +4,6 @@ import bottleneck as bn
 import numpy as np
 import pandas as pd
 
-
 COMMISSION = 2e-4
 
 CODES_MM = set(  # 25 in total
@@ -20,7 +19,7 @@ CODES_INTER = {  # 22
     "CF", "AP", "p", "RM", "jd",  # 农产 5
     "cu", "zn", "al",  # 有色 3
     "hc", "i", "j", "rb", "jm"  # 黑色 5
-    "ag",  # 贵金属 1
+                          "ag",  # 贵金属 1
 }
 
 CODES_SHORT = {  # 25 in total
@@ -29,11 +28,38 @@ CODES_SHORT = {  # 25 in total
     'UR', 'SA', 'eb', 'eg', 'PF', 'pg', 'v', 'FG', 'TA', 'MA', 'sc',  # 能化 'MA', 'OI', 'Y'  11   5个与mm一致
     'rb', 'hc', 'i', 'j', 'jm',  # 黑色 5
     'al', 'ni', 'cu',  # 金属  3  'CU'
+    'lc', 'ec', 'si', 'ao',  # new 4
 }
 
-CODES_TRADABLE = {'a', 'ag', 'al', 'AP', 'au', 'b', 'bu', 'c', 'CF', 'CJ', 'cs', 'cu', 'eb', 'eg', 'FG', 'hc', 'fu',
-                  'i', 'j', 'jd', 'jm', 'l', 'lh', 'm', 'MA', 'ni', 'OI', 'p', 'pb', 'PF', 'pg', 'PK', 'pp', 'rb', 'RM',
-                  'ru', 'SA', 'sc', 'SF', 'SM', 'sn', 'sp', 'SR', 'ss', 'TA', 'UR', 'v', 'y', 'zn'}
+CODES_TRADABLE = {
+    'a', 'ag', 'al', 'AP', 'au', 'b', 'bu', 'c', 'CF', 'CJ', 'cs', 'cu', 'eb', 'eg', 'FG', 'hc', 'fu',
+    'i', 'j', 'jd', 'jm', 'l', 'lh', 'm', 'MA', 'ni', 'OI', 'p', 'pb', 'PF', 'pg', 'PK', 'pp', 'rb', 'RM',
+    'ru', 'SA', 'sc', 'SF', 'SM', 'sn', 'sp', 'SR', 'ss', 'TA', 'UR', 'v', 'y', 'zn'
+}
+
+CODES_TRADABLE_SL = {
+    'a', 'ag', 'al', 'AP', 'ao', 'au',
+    'b', 'bu', 'bc', 'br',
+    'c', 'CF', 'CJ', 'cs', 'cu',
+    'eb', 'ec', 'eg',
+    'FG', 'fu', 'hc', 'i', 'j', 'jd', 'jm',
+    'l', 'lc', 'lh', 'm', 'MA', 'ni', 'nr', 'OI',
+    'p', 'pb', 'PF', 'pg', 'PK', 'pp', 'PX',
+    'rb', 'RM', 'ru', 'SA', 'sc', 'SF', 'SM', 'sn', 'sp', 'SR', 'ss', 'SH',
+    'TA', 'UR', 'v', 'y', 'zn',
+}
+
+CODES_FORBIDDEN_SL = {'jd', 'bc', 'CJ', 'br'}
+
+
+CODES_NAME_MAP = {
+    "MM": CODES_MM,
+    "INTER": CODES_INTER,
+    "SHORT": CODES_SHORT,
+    "TRADABLE": CODES_TRADABLE,
+    "TRADABLE_SL": CODES_TRADABLE_SL,
+    "FORBIDDEN_SL": CODES_FORBIDDEN_SL,
+}
 
 
 def get_quote(codes, start=dt.datetime(2015, 1, 1), end=dt.datetime.now(), **kwargs):
@@ -378,6 +404,80 @@ def trade_by_std(feat, window, std_multiplier=1):
 
     open_signal = open_signal_df.values
     return open_signal
+
+
+def get_weight_by_3d(quote, param=500, day_count=23, n=3, thres_min=0.25, thres_max=0.65):
+    std = {}
+    r_mat = {}
+    stm_mat = {}
+    for code, group in quote.groupby('symbol'):
+        f = np.log(1 + group['close_price'].pct_change()).rolling(param, min_periods=min(100, param)).std()
+        std[code] = f * np.sqrt(252 * day_count)
+        r_mat[code] = np.log(1 + group['close_price'].pct_change())
+
+        hh = group.loc[:, 'high_price'].rolling(param, min_periods=1).max()
+        ll = group.loc[:, 'low_price'].rolling(param, min_periods=1).min()
+        stm_mat[code] = ((group.loc[:, 'close_price'] * 2 - (hh + ll)).ewm(span=5).mean()) / ((hh - ll).ewm(span=5).mean())
+
+    std = pd.DataFrame(std)
+    r_mat = pd.DataFrame(r_mat)
+    stm_mat = pd.DataFrame(stm_mat)
+
+    corr = r_mat.rolling(param, min_periods=100).corr().abs().mean(axis=1).reset_index()
+    corr.columns = ['datetime', 'symbol', 'corr']
+    corr = corr.pivot(index='datetime', columns='symbol', values='corr')
+
+    weight = std + corr
+    weight = (thres_max - weight) / (thres_max - thres_min)
+    weight = weight * 2 / 3 + stm_mat.abs() / 3
+
+    if n:
+        weight = (weight * (n - 1) + 1) / n
+
+        loc = weight > 1
+        weight[loc] = 1
+
+        loc = weight < 1 / n
+        weight[loc] = 1 / n
+
+    close = quote.pivot(columns='symbol', values='close_price')
+    trading_contract = (~pd.isna(close.ffill())).sum(axis=1)
+
+    weight = weight.div(trading_contract, axis=0)
+
+    return weight
+
+
+def get_weight_by_std_corr(quote, param=500, day_count=23, n=3, thres_min=0.25, thres_max=0.65):
+    std = {}
+    r_mat = {}
+    for code, group in quote.groupby('symbol'):
+        f = np.log(1 + group['close_price'].pct_change()).rolling(param, min_periods=min(100, param)).std()
+        std[code] = f * np.sqrt(252 * day_count)
+        r_mat[code] = np.log(1 + group['close_price'].pct_change())
+
+    std = pd.DataFrame(std)
+
+    r_mat = pd.DataFrame(r_mat)
+    corr = r_mat.rolling(param, min_periods=100).corr().abs().mean(axis=1).reset_index()
+    corr.columns = ['datetime', 'symbol', 'corr']
+    corr = corr.pivot(index='datetime', columns='symbol', values='corr')
+
+    weight = std + corr
+    weight = ((thres_max - weight) / (thres_max - thres_min) * (n - 1) + 1) / n
+
+    loc = weight > 1
+    weight[loc] = 1
+
+    loc = weight < 1 / n
+    weight[loc] = 1 / n
+
+    close = quote.pivot(columns='symbol', values='close_price')
+    trading_contract = (~pd.isna(close.ffill())).sum(axis=1)
+
+    weight = weight.div(trading_contract, axis=0)
+
+    return weight
 
 
 def get_weight_by_std_minus(quote, param=500, day_count=23, n=3, std_min=0.1, std_max=0.45):
@@ -803,7 +903,7 @@ def exit_w_trace_atr_exit(open_signal, close, atr, atr_multiplier, max_hp):
     return open_signal_exit
 
 
-def exit_w_atr_exit(open_signal, close, atr, atr_multiplier, max_hp = None):
+def exit_w_atr_exit(open_signal, close, atr, atr_multiplier, max_hp=None):
     # Exit with fix holding period ONLY
     # 有头寸时，会忽略任何信号，直至当前头寸成功平仓
 
@@ -880,7 +980,7 @@ def exit_w_atr_exit(open_signal, close, atr, atr_multiplier, max_hp = None):
     return open_signal_exit
 
 
-def exit_w_loss_exit(open_signal, close, stoploss, max_hp = None):
+def exit_w_loss_exit(open_signal, close, stoploss, max_hp=None):
     # Exit with fix holding period ONLY
     # 有头寸时，会忽略任何信号，直至当前头寸成功平仓
 
@@ -1023,4 +1123,3 @@ def calc_calmar(returns):
 def calc_maxdd(returns):
     nv = np.cumsum(returns) + 1
     return np.max(np.maximum.accumulate(nv) - nv)
-
