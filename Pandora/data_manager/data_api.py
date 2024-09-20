@@ -657,6 +657,49 @@ class FutureDataAPI:
 
         return df_quote
 
+    def get_tick(
+            self,
+            codes: Union[str, Sequence[str]],
+            begin_date: Union[str, date],
+            end_date: Union[str, date],
+            product: Product = Product.FUTURES,
+            filter_time=True,
+            fields: Union[str, Sequence[str]] = None,
+    ):
+        if isinstance(fields, str):
+            fields = [fields]
+
+        if fields:
+            fields = [Strs.camel_to_snake(i) for i in fields]
+
+        else:
+            fields = ['last_price', 'volume', 'turnover', 'open_interest', 'bid_price_1', 'ask_price_1', 'bid_volume_1', 'ask_volume_1']
+
+        fields = "datetime,symbol," + ','.join(fields)
+
+        tab_name = self.dolphindb.get_table_name('tick', product)
+        cond_str = FutureDataAPI.pair_equals("symbol", codes)
+
+        if isinstance(begin_date, str):
+            begin_date = parser.parse(timestr=begin_date, fuzzy=True)
+
+        if isinstance(end_date, str):
+            end_date = parser.parse(timestr=end_date, fuzzy=True)
+
+        df_quote = self.dolphindb.query(
+            tab_name,
+            fields=fields,
+            start=begin_date,
+            end=end_date,
+            where=cond_str
+        )
+
+        if filter_time:
+            df_quote = self.filtering_time(df_quote)
+
+        return df_quote
+
+
     def get_future_quote_mssql(
             self,
             codes: Union[str, Sequence[str]],

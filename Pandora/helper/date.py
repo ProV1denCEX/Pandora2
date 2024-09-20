@@ -73,6 +73,7 @@ class TDays:
 
     @staticmethod
     def wrap_tdays(df: pd.DataFrame, col_dt='DateTime', col_tdate='TradeDate'):
+        col_daten = "__DateN"
         col_date = "__Date"
         col_next = "__NextDate"
 
@@ -81,17 +82,14 @@ class TDays:
         calendar.loc[:, col_next] = calendar.loc[:, col_date].shift(-1)
         calendar = calendar.loc[:, [col_date, col_next]]
 
-        df.loc[:, col_date] = pd.to_datetime(df.loc[:, col_dt].dt.date)
-        df = pd.merge_asof(df.sort_values(col_dt), calendar, on=col_date)
+        df[col_daten] = pd.to_datetime(df.loc[:, col_dt].dt.date)
+        df = pd.merge_asof(df.sort_values(col_dt), calendar, left_on=col_daten, right_on=col_date, direction='forward')
 
-        night_end = df.loc[:, col_date].apply(dt.datetime.combine, args=(dt.time(16),))
-        day_begin = df.loc[:, col_date].apply(dt.datetime.combine, args=(dt.time(9),))
-
-        loc = (df.loc[:, col_dt] <= night_end) & (df.loc[:, col_dt] >= day_begin)
+        loc = (df.loc[:, col_dt].dt.time <= dt.time(16))
         df.loc[loc, col_tdate] = df.loc[loc, col_date]
         df.loc[~loc, col_tdate] = df.loc[~loc, col_next]
 
-        return df.drop(columns=[col_date, col_next], errors="ignore")
+        return df.drop(columns=[col_daten, col_date, col_next], errors="ignore")
 
     @staticmethod
     def is_tday(t_date: TP.TDate, exchange='SHFE') -> bool:

@@ -45,7 +45,7 @@ CODES_TRADABLE_SL = {
     'FG', 'fu', 'hc', 'i', 'j', 'jd', 'jm',
     'l', 'lc', 'lh', 'm', 'MA', 'ni', 'nr', 'OI',
     'p', 'pb', 'PF', 'pg', 'PK', 'pp', 'PX',
-    'rb', 'RM', 'ru', 'SA', 'sc', 'SF', 'SM', 'sn', 'sp', 'SR', 'ss', 'SH',
+    'rb', 'RM', 'ru', 'SA', 'sc', 'SF', 'SM', 'sn', 'sp', 'SR', 'ss', 'si', 'SH',
     'TA', 'UR', 'v', 'y', 'zn',
 }
 
