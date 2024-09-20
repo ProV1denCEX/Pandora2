@@ -458,6 +458,31 @@ class DolphinDbManager(object):
 
         query.execute()
 
+    def load_tick_data(
+            self,
+            symbol: str = None,
+            exchange: Exchange = None,
+            product: Product = None,
+            start: datetime = None,
+            end: datetime = None
+    ) -> pd.DataFrame:
+        table_name = self.get_table_name("tick", product)
+
+        df = self.query(
+            table_name,
+            symbol=symbol,
+            exchange=exchange,
+            start=start,
+            end=end
+        )
+
+        return df
+
+    def save_tick_data(self, df: pd.DataFrame, product=None):
+        table_name = self.get_table_name("tick", product)
+
+        self.upsert(table_name, df, "datetime")
+
     def save_contract_data(self, df: pd.DataFrame, product=Product.FUTURES):
         if product == Product.OPTION:
             on = "datetime"
