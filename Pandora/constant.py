@@ -205,6 +205,8 @@ class Interval(BaseEnum):
     @staticmethod
     def from_freq(freq):
         if freq == Frequency.Min_1: return Interval.MINUTE_1
+        if freq == Frequency.Min_2: return Interval.MINUTE_2
+        if freq == Frequency.Min_3: return Interval.MINUTE_3
         if freq == Frequency.Min_5: return Interval.MINUTE_5
         if freq == Frequency.Min_15: return Interval.MINUTE_15
         if freq == Frequency.Daily: return Interval.DAILY
@@ -227,6 +229,8 @@ class Frequency(BaseEnum):
     Sec_30 = 30 / 60
 
     Min_1 = 1
+    Min_2 = 2
+    Min_3 = 3
     Min_5 = 5
     Min_15 = 15
     Min_30 = 30
