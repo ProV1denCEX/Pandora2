@@ -537,7 +537,7 @@ def get_weight_by_ew(quote):
     return weight
 
 
-def backtest_factor(open_signal, weight, ret, comm=3e-4):
+def backtest_factor(open_signal, weight, ret, comm=COMMISSION):
     signal = bn.push(open_signal * weight, axis=0)
     tmp = bn.replace(signal, np.nan, 0)
     commission = np.abs(np.diff(tmp, prepend=0, axis=0)) * comm
