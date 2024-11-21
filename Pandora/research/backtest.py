@@ -140,7 +140,7 @@ def trade_by_quantile_imba(feature, window, quantile_upper_long, quantile_lower_
     return open_signal
 
 
-def trade_by_quantile(feature, window, quantile_upper_long):
+def trade_by_quantile(feature, window, quantile_upper_long, one_shot=True):
     quantile_lower_short = 1 - quantile_upper_long
 
     open_signal_df = pd.DataFrame(np.nan, index=feature.index, columns=feature.columns)
@@ -165,12 +165,14 @@ def trade_by_quantile(feature, window, quantile_upper_long):
         loc = (rank <= quantile_lower_short)
         sig.loc[loc] = -1
 
-        # open_signal_df[open_signal_df.columns[col]] = sig
+        if one_shot:
+            sig_ = np.sign(sig.ffill().diff().fillna(0))
+            sig_.loc[sig_ == 0] = np.nan
+            sig_.loc[sig == 0] = 0
+            open_signal_df[open_signal_df.columns[col]] = sig_
 
-        sig_ = np.sign(sig.ffill().diff().fillna(0))
-        sig_.loc[sig_ == 0] = np.nan
-        sig_.loc[sig == 0] = 0
-        open_signal_df[open_signal_df.columns[col]] = sig_
+        else:
+            open_signal_df[open_signal_df.columns[col]] = sig
 
     open_signal = open_signal_df.values
     return open_signal
@@ -445,7 +447,7 @@ def get_weight_by_3d(quote, param=500, day_count=23, n=3, thres_min=0.25, thres_
 
     weight = weight.div(trading_contract, axis=0)
 
-    return weight
+    return weight.ffill()
 
 
 def get_weight_by_std_corr(quote, param=500, day_count=23, n=3, thres_min=0.25, thres_max=0.65):
@@ -477,7 +479,7 @@ def get_weight_by_std_corr(quote, param=500, day_count=23, n=3, thres_min=0.25, 
 
     weight = weight.div(trading_contract, axis=0)
 
-    return weight
+    return weight.ffill()
 
 
 def get_weight_by_std_minus(quote, param=500, day_count=23, n=3, std_min=0.1, std_max=0.45):
@@ -501,7 +503,7 @@ def get_weight_by_std_minus(quote, param=500, day_count=23, n=3, std_min=0.1, st
 
     weight = weight.div(trading_contract, axis=0)
 
-    return weight
+    return weight.ffill()
 
 
 def get_weight_by_std_ratio(quote, param, target, day_count, n=3):
@@ -525,7 +527,7 @@ def get_weight_by_std_ratio(quote, param, target, day_count, n=3):
 
     weight = weight.div(trading_contract, axis=0)
 
-    return weight
+    return weight.ffill()
 
 
 def get_weight_by_ew(quote):
@@ -534,7 +536,7 @@ def get_weight_by_ew(quote):
 
     weight = np.sign(close).div(trading_contract, axis=0)
 
-    return weight
+    return weight.ffill()
 
 
 def backtest_factor(open_signal, weight, ret, comm=COMMISSION):
@@ -904,7 +906,17 @@ def exit_w_trace_atr_exit(open_signal, close, atr, atr_multiplier, max_hp):
 
 
 def exit_w_atr_exit(open_signal, close, atr, atr_multiplier, max_hp=None):
-    # Exit with fix holding period ONLY
+    return exit_w_atr_barrier(open_signal, close, atr, None, atr_multiplier, max_hp)
+
+
+def exit_w_atr_barrier(
+        open_signal: pd.DataFrame,
+        close: pd.DataFrame,
+        atr: pd.DataFrame,
+        takeprofit_multiplier=None,
+        stoploss_multiplier=None,
+        max_hp=None
+):
     # 有头寸时，会忽略任何信号，直至当前头寸成功平仓
 
     os_np = open_signal.values
@@ -921,67 +933,100 @@ def exit_w_atr_exit(open_signal, close, atr, atr_multiplier, max_hp=None):
 
         indices = np.where(~np.isnan(signal_))
         next_idx = 0
-        for i in indices[0]:
-            current_signal = signal_[i]
+        try:
+            for i in indices[0]:
+                current_signal = signal_[i]
 
-            # if current_signal == 0:
-            #     # close by signal
-            #     open_signal_exit.iat[i, j] = 0
-            #     next_idx = i + 1
-            #     continue
+                # if current_signal == 0:
+                #     # close by signal
+                #     open_signal_exit.iat[i, j] = 0
+                #     next_idx = i + 1
+                #     continue
 
-            # if current_signal * last_signal >= 0 and i < next_idx:
-            #     continue
+                # if current_signal * last_signal >= 0 and i < next_idx:
+                #     continue
 
-            # 当存在反手信号时，会忽略反手，直至当前头寸成功平仓
-            if i < next_idx:
-                continue
+                # 当存在反手信号时，会忽略反手，直至当前头寸成功平仓
+                if i < next_idx:
+                    continue
 
-            if current_signal > 0:
-                c = bn.push(close_[i:])
-                move_max_ = np.maximum.accumulate(c)
+                if current_signal > 0:
+                    os_exit_np[i, j] = current_signal
 
-                loc = np.isnan(close_[i:])
-                move_max_[loc] = np.nan
+                    c = bn.push(close_[i:])
+                    move_max_ = np.maximum.accumulate(c)
 
-                # move_max_ = pd.Series(close_[i:]).expanding().max()
+                    loc = np.isnan(close_[i:])
+                    move_max_[loc] = np.nan
 
-                close_idx = np.argmax((move_max_ - close_[i:]) > atr_multiplier * atr_[i:])
+                    # move_max_ = pd.Series(close_[i:]).expanding().max()
+                    loc = np.full_like(move_max_, False, dtype=bool)
+                    if takeprofit_multiplier is not None:
+                        loc |= (close_[i:] - c[0]) > takeprofit_multiplier * atr_[i:]
 
-                # last_signal = current_signal
-                os_exit_np[i, j] = current_signal
+                    if stoploss_multiplier is not None:
+                        loc |= (move_max_ - close_[i:]) > stoploss_multiplier * atr_[i:]
 
-            elif current_signal < 0:
-                c = bn.push(close_[i:])
-                move_min_ = np.minimum.accumulate(c)
+                    if max_hp:
+                        non_nan_indices = np.where(~np.isnan(close_[i:]))[0]
+                        idx_max_hp = non_nan_indices[max_hp]
 
-                loc = np.isnan(close_[i:])
-                move_min_[loc] = np.nan
-                # move_min_pd = pd.Series(close_[i:]).expanding().min()
+                        loc[idx_max_hp] = True  # max hp in bar
 
-                close_idx = np.argmax((close_[i:] - move_min_) > atr_multiplier * atr_[i:])
+                        # loc[max_hp] = True  # max hp in day
 
-                # last_signal = current_signal
-                os_exit_np[i, j] = current_signal
+                    close_idx = np.argmax(loc)
 
-            else:
-                # nan sig
-                close_idx = 0
+                elif current_signal < 0:
+                    os_exit_np[i, j] = current_signal
 
-            if close_idx:
-                if max_hp:
-                    close_idx = min(close_idx, max_hp)
+                    c = bn.push(close_[i:])
+                    move_min_ = np.minimum.accumulate(c)
 
-                os_exit_np[i + close_idx, j] = 0
-                next_idx = i + close_idx + 1
+                    loc = np.isnan(close_[i:])
+                    move_min_[loc] = np.nan
+                    # move_min_pd = pd.Series(close_[i:]).expanding().min()
+
+                    loc = np.full_like(move_min_, False, dtype=bool)
+                    if takeprofit_multiplier is not None:
+                        loc |= (c[0] - close_[i:]) > takeprofit_multiplier * atr_[i:]
+
+                    if stoploss_multiplier is not None:
+                        loc |= (close_[i:] - move_min_) > stoploss_multiplier * atr_[i:]
+
+                    if max_hp:
+                        non_nan_indices = np.where(~np.isnan(close_[i:]))[0]
+                        idx_max_hp = non_nan_indices[max_hp]
+
+                        loc[idx_max_hp] = True  # max hp in bar
+
+                        # loc[max_hp] = True  # max hp in day
+
+                    close_idx = np.argmax(loc)
+
+                else:
+                    # nan sig
+                    close_idx = 0
+
+                if close_idx:
+                    os_exit_np[i + close_idx, j] = 0
+                    next_idx = i + close_idx + 1
+
+        except IndexError:
+            continue
 
     open_signal_exit = pd.DataFrame(os_exit_np, index=open_signal.index, columns=open_signal.columns)
 
     return open_signal_exit
 
 
-def exit_w_loss_exit(open_signal, close, stoploss, max_hp=None):
-    # Exit with fix holding period ONLY
+def exit_w_loss_barrier(
+        open_signal: pd.DataFrame,
+        close: pd.DataFrame,
+        takeprofit=None,
+        stoploss=None,
+        max_hp=None
+):
     # 有头寸时，会忽略任何信号，直至当前头寸成功平仓
 
     os_np = open_signal.values
@@ -996,61 +1041,90 @@ def exit_w_loss_exit(open_signal, close, stoploss, max_hp=None):
 
         indices = np.where(~np.isnan(signal_))
         next_idx = 0
-        for i in indices[0]:
-            current_signal = signal_[i]
+        try:
+            for i in indices[0]:
+                current_signal = signal_[i]
 
-            # if current_signal == 0:
-            #     # close by signal
-            #     open_signal_exit.iat[i, j] = 0
-            #     next_idx = i + 1
-            #     continue
+                # if current_signal == 0:
+                #     # close by signal
+                #     open_signal_exit.iat[i, j] = 0
+                #     next_idx = i + 1
+                #     continue
 
-            # if current_signal * last_signal >= 0 and i < next_idx:
-            #     continue
+                # if current_signal * last_signal >= 0 and i < next_idx:
+                #     continue
 
-            # 当存在反手信号时，会忽略反手，直至当前头寸成功平仓
-            if i < next_idx:
-                continue
+                # 当存在反手信号时，会忽略反手，直至当前头寸成功平仓
+                if i < next_idx:
+                    continue
 
-            if current_signal > 0:
-                c = bn.push(close_[i:])
-                move_max_ = np.maximum.accumulate(c)
+                if current_signal > 0:
+                    os_exit_np[i, j] = current_signal
 
-                loc = np.isnan(close_[i:])
-                move_max_[loc] = np.nan
+                    c = bn.push(close_[i:])
+                    move_max_ = np.maximum.accumulate(c)
 
-                # move_max_ = pd.Series(close_[i:]).expanding().max()
+                    loc = np.isnan(close_[i:])
+                    move_max_[loc] = np.nan
 
-                close_idx = np.argmax((move_max_ - close_[i:]) > stoploss * close_[i:])
+                    # move_max_ = pd.Series(close_[i:]).expanding().max()
+                    loc = np.full_like(move_max_, False, dtype=bool)
+                    if takeprofit is not None:
+                        loc |= (close_[i:] / c[0] - 1) > takeprofit
 
-                # last_signal = current_signal
-                os_exit_np[i, j] = current_signal
+                    if stoploss is not None:
+                        loc |= (close_[i:] / move_max_ - 1) < -stoploss
 
-            elif current_signal < 0:
-                c = bn.push(close_[i:])
-                move_min_ = np.minimum.accumulate(c)
+                    if max_hp:
+                        loc[max_hp] = True
 
-                loc = np.isnan(close_[i:])
-                move_min_[loc] = np.nan
-                # move_min_pd = pd.Series(close_[i:]).expanding().min()
+                    close_idx = np.argmax(loc)
 
-                close_idx = np.argmax((close_[i:] - move_min_) > stoploss * close_[i:])
+                elif current_signal < 0:
+                    os_exit_np[i, j] = current_signal
 
-                # last_signal = current_signal
-                os_exit_np[i, j] = current_signal
+                    c = bn.push(close_[i:])
+                    move_min_ = np.minimum.accumulate(c)
 
-            else:
-                # nan sig
-                close_idx = 0
+                    loc = np.isnan(close_[i:])
+                    move_min_[loc] = np.nan
+                    # move_min_pd = pd.Series(close_[i:]).expanding().min()
 
-            if close_idx:
-                close_idx = min(close_idx, max_hp)
-                os_exit_np[i + close_idx, j] = 0
-                next_idx = i + close_idx + 1
+                    loc = np.full_like(move_min_, False, dtype=bool)
+                    if takeprofit is not None:
+                        loc |= (close_[i:] / c[0] - 1) < -takeprofit
+
+                    if stoploss is not None:
+                        loc |= (close_[i:] / move_min_ - 1) > stoploss
+
+                    if max_hp:
+                        loc[max_hp] = True
+
+                    close_idx = np.argmax(loc)
+
+                else:
+                    # nan sig
+                    close_idx = 0
+
+                if close_idx:
+                    os_exit_np[i + close_idx, j] = 0
+                    next_idx = i + close_idx + 1
+
+        except IndexError:
+            continue
 
     open_signal_exit = pd.DataFrame(os_exit_np, index=open_signal.index, columns=open_signal.columns)
 
     return open_signal_exit
+
+
+def exit_w_loss_exit(
+        open_signal,
+        close,
+        stoploss,
+        max_hp=None
+):
+    return exit_w_loss_barrier(open_signal, close, None, stoploss, max_hp)
 
 
 def exit_w_max_hp(open_signal, max_hp):
