@@ -3,6 +3,23 @@ import pandas as pd
 import talib
 
 
+def get_mks_factor(quote, param):
+    feat = {}
+    for code, group in quote.groupby('symbol'):
+        A = group['close_price']
+        # A = (group['close_price'] + group['low_price'] + group['high_price']) / 3
+        # A = (group['close_price'] + group['low_price'] + group['high_price']) / 3 * group['Amount']
+        # f = pd.Series(mks(A, param), index=group.index)
+
+        # A = (group['Amount'] / group['Volume']).fillna(method='ffill')
+
+        f = pd.Series(mks(A, param), index=group.index)
+        # f = pd.Series(mks_test(A, param), index=group.index)
+        feat[code] = f
+
+    return pd.DataFrame(feat)
+
+
 def mks(A: np.ndarray, n: int, imax: int = 0):
     df = pd.Series(A)
 
@@ -21,23 +38,6 @@ def mks(A: np.ndarray, n: int, imax: int = 0):
     f = f / denom
 
     return f
-
-
-def get_mks_factor(quote, param):
-    feat = {}
-    for code, group in quote.groupby('symbol'):
-        A = group['close_price']
-        # A = (group['close_price'] + group['low_price'] + group['high_price']) / 3
-        # A = (group['close_price'] + group['low_price'] + group['high_price']) / 3 * group['Amount']
-        # f = pd.Series(mks(A, param), index=group.index)
-
-        # A = (group['Amount'] / group['Volume']).fillna(method='ffill')
-
-        f = pd.Series(mks(A, param), index=group.index)
-        # f = pd.Series(mks_test(A, param), index=group.index)
-        feat[code] = f
-
-    return pd.DataFrame(feat)
 
 
 def get_natr_factor(quote, param):

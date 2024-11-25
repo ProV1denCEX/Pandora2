@@ -1,2 +1,2 @@
 from .backtest import *
-from .factor import *
+from .factor.pivot_func import *
