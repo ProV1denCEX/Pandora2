@@ -3,7 +3,7 @@ import pandas as pd
 from scipy.stats import differential_entropy
 
 from Pandora.research.factor.template import FeatureTemplate
-from Pandora.research.factor.utils import check_index
+from Pandora.research.factor.utils import check_multi_index
 
 
 class RetTSEntropy(FeatureTemplate):
@@ -11,7 +11,7 @@ class RetTSEntropy(FeatureTemplate):
         self.windows = windows
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
-        check_index(X, self.col_datetime, self.col_symbol)
+        check_multi_index(X, self.col_datetime, self.col_symbol)
 
         feat = pd.Series(index=X.index)
 

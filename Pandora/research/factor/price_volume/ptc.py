@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import talib
 from Pandora.research.factor.template import FeatureTemplate
-from Pandora.research.factor.utils import check_index
+from Pandora.research.factor.utils import check_multi_index
 
 
 class PTC(FeatureTemplate):
@@ -10,7 +10,7 @@ class PTC(FeatureTemplate):
         self.window = window
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
-        check_index(X, self.col_datetime, self.col_symbol)
+        check_multi_index(X, self.col_datetime, self.col_symbol)
 
         fast = self.window
         slow = int(fast * 26 / 12)

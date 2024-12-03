@@ -59,6 +59,10 @@ class Dates:
         date += dt.timedelta(days)
         return date.strftime(fmt.value)
 
+    @staticmethod
+    def time_to_timedelta(time: dt.time) -> dt.timedelta:
+        return dt.datetime.combine(dt.date.min, time) - dt.datetime.min
+
 
 class TDays:
     """交易日相关处理, 数据来源wind"""

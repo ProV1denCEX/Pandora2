@@ -2,12 +2,20 @@ import numpy as np
 import pandas as pd
 
 
-def check_index(df, col_dt, col_symbol):
+def check_multi_index(df, col_dt, col_symbol):
     assert (
             isinstance(df, pd.DataFrame)
             and isinstance(df.index, pd.MultiIndex)
             and col_dt in df.index.names
             and col_symbol in df.index.names
+    )
+
+
+def check_dt_index(df, col_dt):
+    assert (
+            isinstance(df, pd.DataFrame)
+            and isinstance(df.index, pd.DatetimeIndex)
+            and col_dt in df.index.names
     )
 
 

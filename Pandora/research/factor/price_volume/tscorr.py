@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import talib
 from Pandora.research.factor.template import FeatureTemplate
-from Pandora.research.factor.utils import check_index, rolling_rank
+from Pandora.research.factor.utils import check_multi_index, rolling_rank
 
 
 class TSCorr(FeatureTemplate):
@@ -10,7 +10,7 @@ class TSCorr(FeatureTemplate):
         self.window = window
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
-        check_index(X, self.col_datetime, self.col_symbol)
+        check_multi_index(X, self.col_datetime, self.col_symbol)
 
         feat = pd.Series(index=X.index)
         for code, data in X.groupby(self.col_symbol):

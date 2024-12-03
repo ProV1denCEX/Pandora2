@@ -11,6 +11,7 @@ from Pandora.constant import DbConn, DbName, Frequency, EdbType, Method, Label, 
 from Pandora.helper.string import Strs, Symbol
 from Pandora.helper.date import Dates, DateFmt
 from Pandora.helper.database import DbManager, WindDbManager, DolphinDbManager
+from Pandora.research import CODES_EQUITY_INDEX, CODES_TREASURY
 
 
 class FutureDataAPI:
@@ -469,10 +470,42 @@ class FutureDataAPI:
         Future Quote
     """
 
-    def get_future_contracts(self, codes: Union[str, Sequence[str]] = "") -> pd.DataFrame:
-        contract = self.dolphindb.load_contract_data(symbol=codes, product=Product.FUTURES)
+    def get_future_contracts(
+            self,
+            codes: Union[str, Sequence[str]] = "",
+            start_date: dt.datetime = None,
+            end_date: dt.datetime = None,
+            ret_type="all",
+    ) -> pd.DataFrame:
 
-        return contract
+        contracts = self.dolphindb.load_contract_data(
+            symbol=codes,
+            product=Product.FUTURES,
+            start=start_date,
+            end=end_date
+        )
+
+        if ret_type == "all":
+            return contracts
+
+        elif ret_type == "raw":
+            loc = (contracts['symbol'] == (contracts['product_id'] + SymbolSuffix.MC)) | (
+                    contracts['symbol'] == (contracts['product_id'] + SymbolSuffix.MNC))
+
+            return contracts[~loc]
+
+        elif ret_type == SymbolSuffix.MC:
+            loc = (contracts['symbol'] == (contracts['product_id'] + SymbolSuffix.MC))
+
+            return contracts[loc]
+
+        elif ret_type == SymbolSuffix.MNC:
+            loc = (contracts['symbol'] == (contracts['product_id'] + SymbolSuffix.MNC))
+
+            return contracts[loc]
+
+        else:
+            raise NotImplementedError
 
     def get_future_basic(self, codes: Union[str, Sequence[str]] = "") -> pd.DataFrame:
         """
@@ -665,6 +698,8 @@ class FutureDataAPI:
             product: Product = Product.FUTURES,
             filter_time=True,
             fields: Union[str, Sequence[str]] = None,
+            clean=True,
+            filter_out_auction=False,
     ):
         if isinstance(fields, str):
             fields = [fields]
@@ -686,19 +721,177 @@ class FutureDataAPI:
         if isinstance(end_date, str):
             end_date = parser.parse(timestr=end_date, fuzzy=True)
 
-        df_quote = self.dolphindb.query(
-            tab_name,
-            fields=fields,
-            start=begin_date,
-            end=end_date,
-            where=cond_str
-        )
+        if isinstance(codes, str):
+            code_count = 1
+
+        else:
+            code_count = len(codes)
+
+        ret = []
+
+        oom_thres = 365 * 5
+        start_date = begin_date
+        while start_date <= end_date:
+            end_date_tmp = min(
+                start_date + dt.timedelta(days=oom_thres // code_count),
+                end_date
+            )
+
+            ret.append(self.dolphindb.query(
+                tab_name,
+                fields=fields,
+                start=start_date,
+                end=end_date_tmp,
+                where=cond_str
+            ))
+
+            start_date = end_date_tmp + dt.timedelta(milliseconds=1)
+
+        ret = pd.concat(ret).reset_index(drop=True)
 
         if filter_time:
-            df_quote = self.filtering_time(df_quote)
+            ret = self.filtering_time(ret)
+
+        if clean:
+            df_quote = []
+
+            for symbol, group in ret.groupby('symbol'):
+
+                product_id = Symbol.get_contract(symbol, upper=True)
+                if product_id in CODES_EQUITY_INDEX:
+                    cleaned = self.clean_equity_index_tick(group, filter_out_auction)
+                    df_quote.extend(cleaned)
+
+                elif product_id in CODES_TREASURY:
+                    cleaned = self.clean_treasury_tick(group, filter_out_auction)
+                    df_quote.extend(cleaned)
+
+                else:
+                    trade_sessions, _ = self.get_trade_sessions(product_id, begin_date, end_date)
+                    cleaned = self.clean_tick(
+                        group,
+                        trade_sessions,
+                        filter_out_auction=filter_out_auction
+                    )
+                    df_quote.append(cleaned)
+
+            ret = pd.concat(df_quote)
+
+        return ret
+
+    def get_trade_sessions(self, product_id: str, min_date, end_date):
+        info = self.get_future_tradetime(product_id, min_date, end_date)
+        loc = info['TradeDate'] == info['TradeDate'].max()
+        info = info[loc]
+
+        loc = info['Type'].str.contains("连续竞价")
+        trade_session = info[loc]
+        trade_session = list(zip(trade_session['StartTime'], trade_session['EndTime']))
+
+        loc = info['Type'].str.contains("集合竞价")
+        auction_session = info[loc]
+        auction_session = list(zip(auction_session['StartTime'], auction_session['EndTime']))
+
+        return trade_session, auction_session
+
+    def clean_treasury_tick(self, group, filter_out_auction):
+        df_quote = []
+        loc = group['datetime'] < dt.datetime(2020, 7, 20)
+        if loc.any():
+            tmp = group[loc]
+            cleaned = self.clean_tick(
+                tmp,
+                [
+                    (dt.time(9, 15), dt.time(11, 30)),
+                    (dt.time(13), dt.time(15, 15)),
+                ],
+                filter_out_auction=filter_out_auction
+            )
+
+            df_quote.append(cleaned)
+
+        if (~loc).any():
+            tmp = group[~loc]
+            cleaned = self.clean_tick(
+                tmp,
+                [
+                    (dt.time(9, 30), dt.time(11, 30)),
+                    (dt.time(13), dt.time(15, 15)),
+                ],
+                filter_out_auction=filter_out_auction
+            )
+
+            df_quote.append(cleaned)
 
         return df_quote
 
+    def clean_equity_index_tick(self, group, filter_out_auction):
+        df_quote = []
+        loc = group['datetime'] < dt.datetime(2016, 1, 1)
+        if loc.any():
+            tmp = group[loc]
+            cleaned = self.clean_tick(
+                tmp,
+                [
+                    (dt.time(9, 15), dt.time(11, 30)),
+                    (dt.time(13), dt.time(15, 15)),
+                ],
+                filter_out_auction=filter_out_auction
+            )
+
+            df_quote.append(cleaned)
+
+        if (~loc).any():
+            tmp = group[~loc]
+            cleaned = self.clean_tick(
+                tmp,
+                [
+                    (dt.time(9, 30), dt.time(11, 30)),
+                    (dt.time(13), dt.time(15)),
+                ],
+                filter_out_auction=filter_out_auction
+            )
+
+            df_quote.append(cleaned)
+
+        return df_quote
+
+    @staticmethod
+    def clean_tick(
+            data,
+            trade_sessions,
+            filter_out_auction=False,
+    ):
+        ret = data.copy()
+        ret['date'] = ret['datetime'].dt.normalize()
+
+        # 1. modify auction timestamp
+        if not filter_out_auction:
+            for start, _ in trade_sessions:
+                start_delta = Dates.time_to_timedelta(start)
+
+                auction_start = ret['date'] + pd.Timedelta(start_delta - dt.timedelta(minutes=5))
+                auction_end = ret['date'] + pd.Timedelta(start_delta)
+                time_modified = ret['date'] + pd.Timedelta(start_delta + dt.timedelta(microseconds=1))
+
+                loc = (ret['datetime'] > auction_start) & (ret['datetime'] <= auction_end)
+                ret.loc[loc, 'datetime'] = time_modified[loc]
+
+        # 2. filter_out unnecessary data
+        loc_in = pd.Series(False, index=ret.index)
+        for start, end in trade_sessions:
+            filter_start = ret['date'] + pd.Timedelta(Dates.time_to_timedelta(start))
+            filter_end = ret['date'] + pd.Timedelta(Dates.time_to_timedelta(end) + dt.timedelta(minutes=1))
+
+            if start < end:
+                loc_in |= ((ret['datetime'] >= filter_start) & (ret['datetime'] <= filter_end))
+
+            else:
+                loc_in |= ((ret['datetime'] >= filter_start) | (ret['datetime'] <= filter_end))
+
+        ret = ret[loc_in]
+
+        return ret
 
     def get_future_quote_mssql(
             self,
@@ -793,6 +986,27 @@ class FutureDataAPI:
         sql += where
 
         return self.mssql_65.query(sql)
+
+    def get_future_tradetime(
+            self,
+            codes: Union[str, Sequence[str]] = None,
+            begin_date: Union[str, date] = None,
+            end_date: Union[str, date] = None
+    ):
+        table_name = "dbo.FutureInfo_TradeTime"
+        sql = f"SELECT TradeDate, Contract, Type, StartTime, EndTime From {table_name} WHERE "
+        where = FutureDataAPI.pair_dates("TradeDate", begin_date, end_date)
+        contracts, tickers = FutureDataAPI.split_codes(codes)
+
+        cond = [FutureDataAPI.pair_equals("Contract", contracts)]
+        cond = [c for c in cond if c.strip()]
+        cond_str = " OR ".join(cond) if cond else ""
+        where += f" AND ({cond_str})" if cond_str else ""
+        where += " ORDER BY TradeDate, Contract "
+        sql += where
+
+        return self.mssql_65.query(sql)
+
 
     def get_future_member_hold(self, codes: list = None, contracts: list = None,
                                start: str = None, end: str = None, info_types: list = None,

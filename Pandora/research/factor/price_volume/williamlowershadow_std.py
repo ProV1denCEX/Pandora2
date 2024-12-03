@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from Pandora.research.factor.template import FeatureTemplate
-from Pandora.research.factor.utils import check_index
+from Pandora.research.factor.utils import check_multi_index
 
 
 class WilliamLowerShadowStd(FeatureTemplate):
@@ -10,7 +10,7 @@ class WilliamLowerShadowStd(FeatureTemplate):
         self.window = window
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
-        check_index(X, self.col_datetime, self.col_symbol)
+        check_multi_index(X, self.col_datetime, self.col_symbol)
 
         param = self.window
         feat = pd.Series(index=X.index)

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from Pandora.research.factor.template import FeatureTemplate
-from Pandora.research.factor.utils import check_index
+from Pandora.research.factor.utils import check_multi_index
 
 
 class STMCsSTM(FeatureTemplate):
@@ -10,7 +10,7 @@ class STMCsSTM(FeatureTemplate):
         self.window = window
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
-        check_index(X, self.col_datetime, self.col_symbol)
+        check_multi_index(X, self.col_datetime, self.col_symbol)
 
         ret = pd.Series(index=X.index)
         feat = {}
@@ -31,7 +31,8 @@ class STMCsSTM(FeatureTemplate):
 
         feat = ((feat * 2).sub(hh + ll, axis=0).div(hh - ll, axis=0) + 1) / 2
 
-        f = feat.melt(ignore_index=False, var_name=self.col_symbol, value_name='value').set_index(self.col_symbol, append=True)['value']
+        feat_name = self.get_feature_names_out()[0]
+        f = feat.melt(ignore_index=False, var_name=self.col_symbol, value_name=feat_name).set_index(self.col_symbol, append=True)[feat_name]
         ret.loc[X.index] = f.loc[X.index]
 
         return ret.values
