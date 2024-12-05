@@ -6,14 +6,13 @@ from Pandora.research.factor.template import TickFeatureTemplate
 from Pandora.research.factor.utils import check_multi_index
 
 
-class PVM(TickFeatureTemplate):
+class Spread(TickFeatureTemplate):
     col_required = [
-        TickFeatureTemplate.col_close,
         TickFeatureTemplate.col_bid_price,
         TickFeatureTemplate.col_ask_price
     ]
 
-    def __init__(self, freq: Frequency, agg_method: str = "sum"):
+    def __init__(self, freq: Frequency, agg_method: str = "mean"):
         self.freq = freq
         self.agg_method = agg_method
 
@@ -25,13 +24,12 @@ class PVM(TickFeatureTemplate):
         for symbol, group in X.groupby(level=self.col_symbol):
             assert group.index.is_monotonic_increasing
 
-            mid_price = (group[self.col_bid_price] + group[self.col_ask_price]) / 2
-            pvm = np.log(group[self.col_close] / mid_price)
+            spread = np.log(group[self.col_ask_price] / group[self.col_bid_price])
 
             loc = (group[self.col_ask_price] == 0) | (group[self.col_bid_price] == 0)
-            pvm[loc] = 0
+            spread[loc] = 0
 
-            f_agg = pvm.resample(self.freq.to_str(), level=self.col_datetime, closed='right', label='left').agg(
+            f_agg = spread.resample(self.freq.to_str(), level=self.col_datetime, closed='right', label='left').agg(
                 [self.agg_method, 'count']
             )
             f_agg[self.col_symbol] = symbol
@@ -52,6 +50,6 @@ class PVM(TickFeatureTemplate):
 
 
 if __name__ == '__main__':
-    pvm = PVM(Frequency.Min_5)
+    pvm = Spread(Frequency.Min_5)
 
     aaa = 1

@@ -710,6 +710,7 @@ class FutureDataAPI:
         else:
             fields = ['last_price', 'volume', 'turnover', 'open_interest', 'bid_price_1', 'ask_price_1', 'bid_volume_1', 'ask_volume_1']
 
+        n_fields = len(fields) + 2
         fields = "datetime,symbol," + ','.join(fields)
 
         tab_name = self.dolphindb.get_table_name('tick', product)
@@ -729,11 +730,11 @@ class FutureDataAPI:
 
         ret = []
 
-        oom_thres = 365 * 5
+        oom_thres = 365 * 5 * (4 + 2)
         start_date = begin_date
         while start_date <= end_date:
             end_date_tmp = min(
-                start_date + dt.timedelta(days=oom_thres // code_count),
+                start_date + dt.timedelta(days=oom_thres // code_count // n_fields),
                 end_date
             )
 

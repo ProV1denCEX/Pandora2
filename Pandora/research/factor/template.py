@@ -29,3 +29,16 @@ class FeatureTemplate(BaseEstimator, TransformerMixin):
 
         """
         raise NotImplementedError()
+
+
+class TickFeatureTemplate(FeatureTemplate):
+    col_close = 'last_price'
+    col_bid_price = 'bid_price_1'
+    col_ask_price = 'ask_price_1'
+
+    col_volume = 'last_volume'
+    col_bid_volume = 'bid_volume_1'
+    col_ask_volume = 'ask_volume_1'
+
+    window_multiplier = 23 * 3 * 5 * 60 * 2
+
