@@ -324,7 +324,7 @@ class DolphinDbManager(object):
         self.session.connect(self.host, self.port, self.user, self.password)
 
         # 创建连接池（用于数据写入）
-        self.pool: ddb.DBConnectionPool = ddb.DBConnectionPool(self.host, self.port, 5, self.user, self.password)
+        self.pool: ddb.DBConnectionPool = None
 
     def __del__(self) -> None:
         """析构函数"""
@@ -383,6 +383,9 @@ class DolphinDbManager(object):
         return df
 
     def upsert(self, table, data, on):
+        if self.pool is None:
+            self.pool = ddb.DBConnectionPool(self.host, self.port, 5, self.user, self.password)
+
         appender: ddb.PartitionedTableAppender = ddb.PartitionedTableAppender(self.db_path, table, on, self.pool)
         appender.append(data)
 
