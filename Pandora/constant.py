@@ -505,6 +505,15 @@ class SymbolSuffix:
     MNC = "01"
 
 
+class Direction(Enum):
+    """
+    Direction of order/trade/position.
+    """
+    LONG = "Long"
+    SHORT = "Short"
+    NET = "Net"
+
+
 class Section:
     MAIL = "notice-mail"
 

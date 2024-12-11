@@ -35,9 +35,9 @@ def _get_factor(group, param, col_close):
 
 
 class MultiVol(FeatureTemplate):
-    def __init__(self, window: int, n_job=-1):
+    def __init__(self, window: int, n_jobs=-1):
         self.window = window
-        self.n_job = n_job
+        self.n_jobs = n_jobs
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
         check_multi_index(X, self.col_datetime, self.col_symbol)

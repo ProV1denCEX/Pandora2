@@ -11,8 +11,8 @@ def get_factor(tick, volume_window, quantile, freq):
     return BVP(volume_window, quantile, freq).set_output(transform="pandas").transform(tick)
 
 
-def get_multi_factors(tick, volume_windows, quantile, freq, n_job):
-    results = Parallel(n_jobs=n_job, verbose=10)(  # n_jobs=-1 表示使用所有CPU核心
+def get_multi_factors(tick, volume_windows, quantile, freq, n_jobs):
+    results = Parallel(n_jobs=n_jobs, verbose=10)(  # n_jobs=-1 表示使用所有CPU核心
         delayed(get_factor)(tick, volume_window, quantile, freq)
         for volume_window in volume_windows
     )
