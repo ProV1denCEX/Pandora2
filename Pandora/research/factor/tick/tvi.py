@@ -28,7 +28,7 @@ class TVI(TickFeatureTemplate):
 
             tvi = (group[self.col_bid_volume] - group[self.col_ask_volume]) / (group[self.col_bid_volume] + group[self.col_ask_volume])
 
-            loc = (group[self.col_ask_price] == 0) | (group[self.col_bid_price] == 0)
+            loc = (group[self.col_ask_price] == 0) & (group[self.col_bid_price] == 0)
             tvi[loc] = 0
 
             f_agg = tvi.resample(self.freq.to_str(), level=self.col_datetime, closed='right', label='left').agg(
