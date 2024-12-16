@@ -1,3 +1,4 @@
+import random
 import warnings
 from dataclasses import dataclass
 from datetime import datetime
@@ -298,8 +299,19 @@ class DolphinDbManager(object):
 
         self.user: str = settings["user"]
         self.password: str = settings["password"]
-        self.host: str = settings["host"]
-        self.port: int = int(settings["port"])
+
+        random_number = random.random()
+
+        if random_number >= 0.5:
+            self.host: str = settings["host"]
+            self.port: int = int(settings["port"])
+
+        else:
+            self.host: str = settings["host2"]
+            self.port: int = int(settings["port2"])
+
+        print(f"running on : {self.port}")
+
         self.db_path: str = "dfs://" + settings["database"]
 
         self.table_name = {
@@ -374,6 +386,13 @@ class DolphinDbManager(object):
 
             elif isinstance(v, Enum):
                 query = query.where(f'{k}="{v.value}"')
+
+            elif isinstance(v, list) or isinstance(v, tuple) or isinstance(v, set):
+                if len(v) == 1:
+                    query = query.where(f'{k}="{list(v)[0]}"')
+
+                else:
+                    query = query.where(f'{k} in {tuple(v)}')
 
             else:
                 query = query.where(f'{k}="{v}"')

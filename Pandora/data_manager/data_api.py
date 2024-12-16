@@ -1247,21 +1247,24 @@ class FutureDataAPI:
         else:
             raise NotImplementedError
 
-        cond = [
-            FutureDataAPI.pair_equals("symbol", symbols),
-            FutureDataAPI.pair_equals("factor_id", ids),
-            FutureDataAPI.pair_equals("factor_name", names),
-        ]
+        kw_api = {
+            "interval": interval,
+            "start": begin_date,
+            "end": end_date,
+        }
 
-        cond = [c for c in cond if c.strip()]
-        cond_str = " AND ".join(cond) if cond else ""
+        if symbols:
+            kw_api["symbol"] = symbols
+
+        if ids:
+            kw_api["factor_id"] = ids
+
+        if names:
+            kw_api["factor_name"] = names
 
         df = self.dolphindb.query(
             tab_name,
-            interval=interval,
-            start=begin_date,
-            end=end_date,
-            where=cond_str
+            **kw_api
         )
 
         return df
