@@ -4,6 +4,8 @@ import bottleneck as bn
 import numpy as np
 import pandas as pd
 
+from Pandora.helper import TDays
+
 COMMISSION = 2e-4
 
 CODES_MM = set(  # 25 in total
@@ -54,7 +56,6 @@ CODES_FORBIDDEN_SL = {'jd', 'bc', 'CJ', 'br'}
 CODES_EQUITY_INDEX = {"IF", "IH", "IC", "IM"}
 CODES_TREASURY = {"T", "TL", "TF", "TS"}
 
-
 CODES_NAME_MAP = {
     "MM": CODES_MM,
     "INTER": CODES_INTER,
@@ -64,6 +65,22 @@ CODES_NAME_MAP = {
     "FORBIDDEN_SL": CODES_FORBIDDEN_SL,
     "EQUITY_INDEX": CODES_EQUITY_INDEX,
     "TREASURY": CODES_TREASURY,
+}
+
+SectorInfo = {
+    "Agriculture": {"PK", "RM", "CJ", "PM", "OI", "CY", "RI", "AP", "JR", "P", "RS", "LH", "LR", "JD",
+                    "A", "Y", "RR", "B", "CS", "CF", "SR", "M", "C", "WH", "RO", "WS"},
+
+    "Chemical": {"FU", "EG", "SA", "PP", "EB", "SC", "L", "BU", "MA", "PF", "SP", "PG",
+                 "TA", "V", "RU", "UR", "LU", "NR", "FG", "FB", "BB"},
+
+    "NonFerrous": {"AU", "CU", "PB", "BC", "SN", "AL", "AG", "NI", "ZN"},
+
+    "Ferrous": {"RB", "I", "HC", "J", "SF", "JM", "SS", "SM", "WR", "ZC"},
+
+    "EquityIndex": {"IC", "IF", "IH", "IM"},
+
+    "Treasury": {"T", "TS", "TF", "TL"},
 }
 
 
@@ -77,6 +94,12 @@ def get_quote(codes, start=dt.datetime(2015, 1, 1), end=dt.datetime.now(), **kwa
     quote_bt.set_index('datetime', inplace=True)
     quote_bt.sort_index(inplace=True)
 
+    ret = get_bar_ret(quote_bt)
+
+    return quote_bt, ret
+
+
+def get_bar_ret(quote_bt: pd.DataFrame):
     ret = {}
     for code, group in quote_bt.groupby('symbol'):
         f = pd.Series(group['close_price'].pct_change().shift(-1), index=group.index)
@@ -93,7 +116,7 @@ def get_quote(codes, start=dt.datetime(2015, 1, 1), end=dt.datetime.now(), **kwa
     if 'bu00' in ret.columns:
         ret.loc[:dt.datetime(2015, 10, 1), 'bu00'] = np.nan
 
-    return quote_bt, ret
+    return ret
 
 
 def trade_by_quantile_imba(feature, window, quantile_upper_long, quantile_lower_long,
@@ -756,6 +779,13 @@ def limit_trade_hp(open_signal, min_hp=0, max_hp=1000000):
     signal = pd.DataFrame(signal_np, index=open_signal.index, columns=open_signal.columns).fillna(0)
 
     return signal
+
+
+def infer_day_count(quote):
+    if "trade_date" not in quote:
+        quote = TDays.wrap_tdays(quote.reset_index(), "datetime", "trade_date")
+
+    return quote.groupby(['symbol', 'trade_date'])['close_price'].count().mode().iat[0]
 
 
 def exit_w_trace_exit(open_signal, close, stoploss, max_hp):

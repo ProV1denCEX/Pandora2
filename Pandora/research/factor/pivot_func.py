@@ -40,6 +40,17 @@ def mks(A: np.ndarray, n: int, imax: int = 0):
     return f
 
 
+def get_atr_factor(quote, param):
+    feat = {}
+
+    for code, group in quote.groupby('symbol'):
+        f = talib.ATR(group['high_price'], group['low_price'], group['close_price'], param)
+
+        feat[code] = f
+
+    return pd.DataFrame(feat)
+
+
 def get_natr_factor(quote, param):
     feat = {}
 

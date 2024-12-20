@@ -310,8 +310,6 @@ class DolphinDbManager(object):
             self.host: str = settings["host2"]
             self.port: int = int(settings["port2"])
 
-        print(f"running on : {self.port}")
-
         self.db_path: str = "dfs://" + settings["database"]
 
         self.table_name = {
