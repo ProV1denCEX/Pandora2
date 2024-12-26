@@ -4,7 +4,7 @@ from ..event import EventEngine, Event
 from ..trader.engine import MainEngine
 from ..trader.gateway import BaseGateway
 from ..trader.event import EVENT_LOG
-from ..trader.object import LogData
+from Pandora.trader.object import LogData
 
 from .engine import TickFeedEngine
 

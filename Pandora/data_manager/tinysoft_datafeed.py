@@ -7,7 +7,7 @@ from pyTSL import Client, DoubleToDatetime
 
 from Pandora.constant import Frequency, Exchange, Interval, OptionType
 from Pandora.helper import TDays, Symbol, DateFmt
-
+from Pandora.trader.object import HistoryRequest
 
 EXCHANGE_MAP: Dict[Exchange, str] = {
     Exchange.SSE: "SH",
@@ -149,5 +149,5 @@ class TinysoftDatafeed(object):
         self.inited = True
         return True
 
-    def query_warehouse(self):
+    def query_warehouse(self, req: HistoryRequest, output: Callable = print):
         pass

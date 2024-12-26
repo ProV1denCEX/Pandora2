@@ -7,15 +7,15 @@ from ..api import (
     MdApi
 )
 from ..event import EventEngine
-from ..trader.constant import (
+from Pandora.constant import (
     Exchange
 )
 from ..trader.gateway import BaseGateway
-from ..trader.object import (
+from Pandora.trader.object import (
     TickData,
     SubscribeRequest,
 )
-from ..trader.utility import get_folder_path
+from Pandora.trader.utility import get_folder_path
 
 # 交易所映射
 EXCHANGE_CTP2VT: Dict[str, Exchange] = {

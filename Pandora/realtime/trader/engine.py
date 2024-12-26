@@ -8,14 +8,14 @@ from .event import (
     EVENT_LOG
 )
 from .gateway import BaseGateway
-from .object import (
+from Pandora.trader.object import (
     LogData,
     SubscribeRequest,
     TickData,
     ContractData,
     Exchange
 )
-from .utility import TRADER_DIR
+from Pandora.trader.utility import TRADER_DIR
 from ..event import Event, EventEngine
 
 

@@ -3,7 +3,7 @@ from typing import Optional, Sequence, Any
 from pandas import DataFrame
 
 from ..trader.engine import BaseEngine
-from ..trader.object import (
+from Pandora.trader.object import (
     BaseData,
     SubscribeRequest,
     TickData,
