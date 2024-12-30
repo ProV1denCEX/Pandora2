@@ -150,4 +150,24 @@ class TinysoftDatafeed(object):
         return True
 
     def query_warehouse(self, req: HistoryRequest, output: Callable = print):
-        pass
+        if not self.inited:
+            self.init(output)
+
+        start_str: str = req.start.strftime("%Y%m%d")
+        end_str: str = req.end.strftime("%Y%m%d")
+
+        product_id = req.symbol
+
+        cmd: str = (
+            f"setsysparam(pn_stock(), '{product_id}');"
+            f"ret:=GetFuturesDailyWarehouse(inttodate({start_str}),inttodate({end_str}),t);"
+            f"return t;"
+        )
+        result = self.client.exec(cmd)
+
+        if result.error():
+            output(result)
+
+        else:
+            data = pd.DataFrame(result.value())
+            return data
