@@ -45,7 +45,7 @@ class MultiVol(FeatureTemplate):
         param = self.window
         feat = pd.Series(index=X.index)
 
-        results = Parallel(n_jobs=self.n_job)(  # n_jobs=-1 表示使用所有CPU核心
+        results = Parallel(n_jobs=self.n_jobs)(  # n_jobs=-1 表示使用所有CPU核心
             delayed(_get_factor)(group, param, self.col_close)
             for code, group in X.groupby(self.col_symbol)
         )
