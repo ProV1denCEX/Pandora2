@@ -225,6 +225,19 @@ class Frequency(BaseEnum):
             return vals[1] + vals[0]
 
     @property
+    def seconds(self):
+        if isinstance(self.value, float) or isinstance(self.value, int):
+            return self.value * 60
+
+        elif self == Frequency.Daily:
+            return 24 * 60 * 60
+
+        elif self == Frequency.Weekly:
+            return 7 * 24 * 60 * 60
+
+        raise NotImplementedError
+
+    @property
     def unit(self):
         return self.name.lower().split('_')[0]
 
