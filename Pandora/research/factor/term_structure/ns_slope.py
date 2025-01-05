@@ -57,7 +57,7 @@ class NsSlope(FeatureTemplate):
             col_ptm='ptm_day',
             col_mc='mc',
             col_name='name',
-            n_job=-1
+            n_jobs=-1
     ):
         self.liquidity = liquidity
         self.turnover_window = turnover_window
@@ -70,7 +70,7 @@ class NsSlope(FeatureTemplate):
         self.col_name = col_name
 
         self.col_turnover_check = 'turnover_check'
-        self.n_job = n_job
+        self.n_jobs = n_jobs
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         self.set_output(transform="pandas")
@@ -96,7 +96,7 @@ class NsSlope(FeatureTemplate):
 
         feat_name = self.get_feature_names_out()[0]
 
-        results = Parallel(n_jobs=self.n_job)(  # n_jobs=-1 表示使用所有CPU核心
+        results = Parallel(n_jobs=self.n_jobs)(  # n_jobs=-1 表示使用所有CPU核心
             delayed(get_factor)(
                 product_id, dt_, group,
                 self.col_turnover_check, self.liquidity,

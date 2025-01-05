@@ -58,7 +58,7 @@ class BasisSTM(FeatureTemplate):
             turnover_window: int = 1,
             mom_type: str = "STM",
             col_product_id='product_id', col_ptm='ptm_day', col_name='name',
-            n_job=-1
+            n_jobs=-1
     ):
         self.liquidity = liquidity
         self.t2 = t2
@@ -71,7 +71,7 @@ class BasisSTM(FeatureTemplate):
         self.col_ptm = col_ptm
         self.col_turnover_check = 'turnover_check'
 
-        self.n_job = n_job
+        self.n_jobs = n_jobs
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         self.set_output(transform="pandas")
@@ -100,7 +100,7 @@ class BasisSTM(FeatureTemplate):
             return pd.DataFrame({col_mom: mom, col_turnover_check: liquidity})
 
         # 这里用parallel 是为了in case mom 的算法复杂，算起来慢；实际上耗时主要在join的地方
-        results = Parallel(n_jobs=self.n_job)(  # n_jobs=-1 表示使用所有CPU核心
+        results = Parallel(n_jobs=self.n_jobs)(  # n_jobs=-1 表示使用所有CPU核心
             delayed(get_mom_info)(group, self.window, self.turnover_window,
                                   self.col_close, self.col_turnover, self.col_mom, self.col_turnover_check)
             for code, group in X.groupby(self.col_name)
@@ -114,7 +114,7 @@ class BasisSTM(FeatureTemplate):
         feat_name = self.get_feature_names_out()[0]
         t1 = 0
 
-        results = Parallel(n_jobs=self.n_job)(  # n_jobs=-1 表示使用所有CPU核心
+        results = Parallel(n_jobs=self.n_jobs)(  # n_jobs=-1 表示使用所有CPU核心
             delayed(get_basis_mom)(
                 product_id, dt_, group,
                 t1, self.t2,
