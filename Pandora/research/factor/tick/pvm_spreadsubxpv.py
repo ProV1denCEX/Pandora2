@@ -52,7 +52,7 @@ class PVMSpreadSubXPV(TickFeatureTemplate):
 
             loc1 = (spread > spread.rolling(window, min_periods=1).quantile(qtl))
 
-            mid_price = data[self.col_close].mask(~loc1, np.nan).ffill()
+            mid_price = data[self.col_close].symbol_masker(~loc1, np.nan).ffill()
             pvm = np.log(data[self.col_close] / mid_price)
 
             loc = (data[self.col_ask_price] == 0) | (data[self.col_bid_price] == 0)
@@ -61,7 +61,7 @@ class PVMSpreadSubXPV(TickFeatureTemplate):
             xpv = data[self.col_close].pct_change() / data[self.col_volume]
             loc = (data[self.col_volume] == 0)
             xpv[loc] = 0
-            xpv = xpv.mask(~loc1, np.nan).ffill()
+            xpv = xpv.symbol_masker(~loc1, np.nan).ffill()
 
             pvm = pvm * xpv
 

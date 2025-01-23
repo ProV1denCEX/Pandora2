@@ -785,7 +785,11 @@ def infer_day_count(quote):
     if "trade_date" not in quote:
         quote = TDays.wrap_tdays(quote.reset_index(), "datetime", "trade_date")
 
-    return quote.groupby(['symbol', 'trade_date'])['close_price'].count().mode().iat[0]
+    if 'datetime' in quote:
+        return quote.groupby(['symbol', 'trade_date'])['datetime'].count().mode().iat[0]
+
+    if 'close_price' in quote:
+        return quote.groupby(['symbol', 'trade_date'])['close_price'].count().mode().iat[0]
 
 
 def exit_w_trace_exit(open_signal, close, stoploss, max_hp):

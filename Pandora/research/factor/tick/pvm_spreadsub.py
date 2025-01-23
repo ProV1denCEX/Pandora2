@@ -51,7 +51,7 @@ class PVMSpreadSub(TickFeatureTemplate):
 
             loc1 = (spread > spread.rolling(window, min_periods=1).quantile(qtl))
 
-            mid_price = data[self.col_close].mask(~loc1, np.nan).ffill()
+            mid_price = data[self.col_close].symbol_masker(~loc1, np.nan).ffill()
             pvm = np.log(data[self.col_close] / mid_price)
 
             loc = (data[self.col_ask_price] == 0) | (data[self.col_bid_price] == 0)
