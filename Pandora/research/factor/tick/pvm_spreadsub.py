@@ -12,7 +12,7 @@ def get_factor(tick, window, quantile, freq):
 
 
 def get_multi_factors(tick, windows, quantile, freq, n_jobs):
-    results = Parallel(n_jobs=n_jobs, verbose=10)(  # n_jobs=-1 表示使用所有CPU核心
+    results = Parallel(n_jobs=n_jobs)(  # n_jobs=-1 表示使用所有CPU核心
         delayed(get_factor)(tick, window, quantile, freq)
         for window in windows
     )
@@ -51,7 +51,7 @@ class PVMSpreadSub(TickFeatureTemplate):
 
             loc1 = (spread > spread.rolling(window, min_periods=1).quantile(qtl))
 
-            mid_price = data[self.col_close].symbol_masker(~loc1, np.nan).ffill()
+            mid_price = data[self.col_close].mask(~loc1, np.nan).ffill()
             pvm = np.log(data[self.col_close] / mid_price)
 
             loc = (data[self.col_ask_price] == 0) | (data[self.col_bid_price] == 0)
